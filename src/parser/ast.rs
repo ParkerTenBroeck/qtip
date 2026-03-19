@@ -1,5 +1,16 @@
+use crate::lex::Span;
 
-pub enum Item<'a>{
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Node{
+    pub range: Span,
+}
+
+#[derive(Debug)]
+pub struct Program<'a>(pub Vec<Item<'a>>);
+
+#[derive(Debug)]
+pub enum ItemKind<'a>{
     Module(),
     Use(),
     Function(Func<'a>),
@@ -11,46 +22,67 @@ pub enum Item<'a>{
     Union(),
 }
 
+#[derive(Debug)]
+pub struct Item<'a>{
+    pub node: Node,
+    pub kind: ItemKind<'a>,
+    pub vis: Vis,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Vis{
     Pub,
     Priv,
 }
 
-
-pub struct Func<'a>{
-    pub vis: Vis,
+#[derive(Debug)]
+pub struct Symbol<'a>{
     pub name: &'a str,
+    pub node: Node,
+}
+
+#[derive(Debug)]
+pub struct Func<'a>{
+    pub name: Symbol<'a>,
     pub args: Vec<FuncParam<'a>>
 }
 
+#[derive(Debug)]
 pub struct FuncParam<'a>{
+    pub node: Node,
     pub vis: Vis,
-    pub name: &'a str,
+    pub name: Symbol<'a>,
     pub ty: Type<'a>,
 }
 
+#[derive(Debug)]
 pub struct Type<'a>{
-    pub name: &'a str,
+    pub name: Symbol<'a>,
 }
 
+#[derive(Debug)]
+pub struct Let<'a>{
+    pub name: Symbol<'a>,
+    pub ty: Type<'a>,
+    pub initializer: Option<Expr<'a>>,
+}
+
+#[derive(Debug)]
 pub enum Stmt<'a>{
-    Item(Box<Item<'a>>),
+    Item(ItemKind<'a>),
     Expr(Expr<'a>),
-    Let{
-        name: &'a str,
-        ty: Type<'a>,
-        initializer: Option<Expr<'a>>,
-    }
+    Let(Let<'a>)
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BinOp{
     Add,
     Sub,
     Mul,
     Div,
-
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnOp{
     Neg,
     Not,
@@ -58,13 +90,27 @@ pub enum UnOp{
     DeRef,
 }
 
+#[derive(Debug)]
+pub struct CondBlock<'a>{
+    pub cond: Expr<'a>,
+    pub block: Expr<'a>,
+}
 
-pub enum Expr<'a>{
+#[derive(Debug)]
+pub struct Expr<'a>{
+    pub node: Node,
+    pub kind: ExprKind<'a>,
+}
+
+#[derive(Debug)]
+pub enum ExprKind<'a>{
     Block(Vec<Stmt<'a>>),
     If{
-        if_: Vec<(Expr<'a>, Expr<'a>)>,
-        else_: Option<Box<(Expr<'a>, Expr<'a>)>>,
+        if_chain: Vec<CondBlock<'a>>,
+        else_end: Option<Box<Expr<'a>>>,
     },
+    While(Box<CondBlock<'a>>),
+    Loop(Box<Expr<'a>>),
     FuncCall{
         ptr: Box<Expr<'a>>,
         args: Vec<Expr<'a>>,
@@ -82,5 +128,5 @@ pub enum Expr<'a>{
         expr: Box<Expr<'a>>,
         ty: Type<'a>,
     },
-    Name(&'a str)
+    Path(Symbol<'a>)
 }
