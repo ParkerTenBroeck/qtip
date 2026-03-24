@@ -1,4 +1,4 @@
-use qtip::{lex::Lexer, parser::Parser};
+use twinkle::{lex::Lexer, parser::Parser};
 
 fn main() {
     let program = "
