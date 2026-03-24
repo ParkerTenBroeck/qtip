@@ -1,11 +1,13 @@
 pub mod number;
-pub mod token;
 #[cfg(test)]
 pub mod tests;
+pub mod token;
 
 pub use number::*;
 use std::str::Chars;
 pub use token::*;
+
+use crate::span::{Span, Spanned};
 
 type LexerResult<'a> = Result<Spanned<Token<'a>>, Box<Spanned<LexError>>>;
 
@@ -110,22 +112,22 @@ impl<'a> Lexer<'a> {
 
             let tok = match self.next_char() {
                 Some('+') => match consume_if!('=' | '+') {
-                    Some('=') => Ok(Token::PlusEq),
+                    Some('=') => Ok(Token::PlusAssign),
                     Some('+') => Ok(Token::Inc),
                     _ => Ok(Token::Plus),
                 },
                 Some('-') => match consume_if!('>' | '=' | '-') {
                     Some('>') => Ok(Token::SmallRightArrow),
-                    Some('=') => Ok(Token::MinusEq),
+                    Some('=') => Ok(Token::MinusAssign),
                     Some('-') => Ok(Token::Dec),
                     _ => Ok(Token::Minus),
                 },
                 Some('*') => match consume_if!('=') {
-                    Some('=') => Ok(Token::TimesEq),
+                    Some('=') => Ok(Token::TimesAssign),
                     _ => Ok(Token::Star),
                 },
                 Some('/') => match consume_if!('=' | '/' | '*') {
-                    Some('=') => Ok(Token::DivideEq),
+                    Some('=') => Ok(Token::DivideAssign),
                     Some('/') => loop {
                         if matches!(self.next_char(), None | Some('\n')) {
                             break Ok(Token::SingleLineComment(&self.str[start + 2..self.current]));
@@ -151,18 +153,18 @@ impl<'a> Lexer<'a> {
                     _ => Ok(Token::Slash),
                 },
                 Some('%') => match consume_if!('=') {
-                    Some('=') => Ok(Token::ModuloEq),
+                    Some('=') => Ok(Token::ModuloAssign),
                     _ => Ok(Token::Percent),
                 },
                 Some('=') => match consume_if!('>' | '=') {
                     Some('>') => Ok(Token::BigRightArrow),
                     Some('=') => Ok(Token::Equals),
-                    _ => Ok(Token::Assignment),
+                    _ => Ok(Token::Assign),
                 },
                 Some('>') => match consume_if!('=' | '>') {
                     Some('=') => Ok(Token::GreaterThanEq),
                     Some('>') => match consume_if!('=') {
-                        Some('=') => Ok(Token::ShiftRightEq),
+                        Some('=') => Ok(Token::ShiftRightAssign),
                         _ => Ok(Token::ShiftRight),
                     },
                     _ => Ok(Token::GreaterThan),
@@ -170,7 +172,7 @@ impl<'a> Lexer<'a> {
                 Some('<') => match consume_if!('=' | '<') {
                     Some('=') => Ok(Token::LessThanEq),
                     Some('<') => match consume_if!('=') {
-                        Some('=') => Ok(Token::ShiftLeftEq),
+                        Some('=') => Ok(Token::ShiftLeftAssign),
                         _ => Ok(Token::ShiftLeft),
                     },
                     _ => Ok(Token::LessThan),
@@ -180,17 +182,17 @@ impl<'a> Lexer<'a> {
                     _ => Ok(Token::LogicalNot),
                 },
                 Some('|') => match consume_if!('=' | '|') {
-                    Some('=') => Ok(Token::OrEq),
+                    Some('=') => Ok(Token::OrAssign),
                     Some('|') => Ok(Token::LogicalOr),
                     _ => Ok(Token::BitwiseOr),
                 },
                 Some('&') => match consume_if!('=' | '&') {
-                    Some('=') => Ok(Token::AndEq),
+                    Some('=') => Ok(Token::AndAssign),
                     Some('&') => Ok(Token::LogicalAnd),
                     _ => Ok(Token::Ampersand),
                 },
                 Some('^') => match consume_if!('=') {
-                    Some('=') => Ok(Token::XorEq),
+                    Some('=') => Ok(Token::XorAssign),
                     _ => Ok(Token::BitwiseXor),
                 },
                 Some('.') => match consume_if!('.') {

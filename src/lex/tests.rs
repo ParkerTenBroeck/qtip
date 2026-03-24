@@ -1,4 +1,3 @@
-
 use super::*;
 
 fn lex_all(input: &str) -> Result<Vec<Spanned<Token<'_>>>, Box<Spanned<LexError>>> {
@@ -63,7 +62,7 @@ fn lexes_basic_operators() {
             Token::Star,
             Token::Slash,
             Token::Percent,
-            Token::Assignment,
+            Token::Assign,
             Token::GreaterThan,
             Token::LessThan,
             Token::LogicalNot,
@@ -86,28 +85,28 @@ fn lexes_compound_operators() {
     assert_eq!(
         tokens,
         vec![
-            Token::PlusEq,
+            Token::PlusAssign,
             Token::Inc,
-            Token::MinusEq,
+            Token::MinusAssign,
             Token::Dec,
             Token::SmallRightArrow,
-            Token::TimesEq,
-            Token::DivideEq,
-            Token::ModuloEq,
+            Token::TimesAssign,
+            Token::DivideAssign,
+            Token::ModuloAssign,
             Token::BigRightArrow,
             Token::Equals,
             Token::GreaterThanEq,
             Token::ShiftRight,
-            Token::ShiftRightEq,
+            Token::ShiftRightAssign,
             Token::LessThanEq,
             Token::ShiftLeft,
-            Token::ShiftLeftEq,
+            Token::ShiftLeftAssign,
             Token::NotEquals,
-            Token::OrEq,
+            Token::OrAssign,
             Token::LogicalOr,
-            Token::AndEq,
+            Token::AndAssign,
             Token::LogicalAnd,
-            Token::XorEq,
+            Token::XorAssign,
             Token::RangeExclusive,
             Token::RangeInclusive,
             Token::Eof,
@@ -123,7 +122,7 @@ fn skips_whitespace() {
         vec![
             Token::Let,
             Token::Ident("x"),
-            Token::Assignment,
+            Token::Assign,
             Token::NumericLiteral(Number::new("5", Base::Int, false).unwrap()),
             Token::Eof,
         ]
@@ -499,9 +498,7 @@ fn lexes_float_with_suffix_then_range() {
     assert_eq!(
         tokens,
         vec![
-            Token::NumericLiteral(
-                Number::new_with_suffix("1.0f32", 3, Base::Int, true).unwrap()
-            ),
+            Token::NumericLiteral(Number::new_with_suffix("1.0f32", 3, Base::Int, true).unwrap()),
             Token::RangeExclusive,
             Token::NumericLiteral(Number::new("2", Base::Int, false).unwrap()),
             Token::Eof,
@@ -594,7 +591,7 @@ fn lexes_mixed_snippet() {
             Token::LBrace,
             Token::Let,
             Token::Ident("z"),
-            Token::Assignment,
+            Token::Assign,
             Token::Ident("x"),
             Token::Plus,
             Token::Ident("y"),

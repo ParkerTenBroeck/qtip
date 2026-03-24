@@ -1,6 +1,6 @@
 use super::Number;
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone, Copy, Default)]
 pub enum Token<'a> {
     LPar,
     RPar,
@@ -41,23 +41,23 @@ pub enum Token<'a> {
     Equals,
     NotEquals,
 
-    Assignment,
+    Assign,
+    ModuloAssign,
+    DivideAssign,
+    TimesAssign,
+    MinusAssign,
+    PlusAssign,
+    OrAssign,
+    AndAssign,
+    XorAssign,
+    ShiftRightAssign,
+    ShiftLeftAssign,
 
-    ModuloEq,
     Percent,
-    DivideEq,
-    TimesEq,
-    MinusEq,
-    PlusEq,
     RangeInclusive,
     RangeExclusive,
     SmallRightArrow,
     BigRightArrow,
-    OrEq,
-    AndEq,
-    XorEq,
-    ShiftRightEq,
-    ShiftLeftEq,
 
     Fn,
     Static,
@@ -91,6 +91,7 @@ pub enum Token<'a> {
     SingleLineComment(&'a str),
     MultiLineComment(&'a str),
 
+    #[default]
     Eof,
 }
 
@@ -114,29 +115,5 @@ impl<'a> StringLiteral<'a> {
             repr,
             escaped: true,
         }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Spanned<T> {
-    pub span: Span,
-    pub val: T,
-}
-
-impl<T> Spanned<T> {
-    pub fn new(val: T, span: Span) -> Self {
-        Self { val, span }
-    }
-}
-
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub struct Span {
-    pub start: usize,
-    pub end: usize,
-}
-
-impl Span {
-    pub fn new(start: usize, end: usize) -> Self {
-        Span { start, end }
     }
 }
