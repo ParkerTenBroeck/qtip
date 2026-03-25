@@ -163,19 +163,13 @@ impl<'a> Lexer<'a> {
                 },
                 Some('>') => match consume_if!('=' | '>') {
                     Some('=') => Ok(Token::GreaterThanEq),
-                    Some('>') => match consume_if!('=') {
-                        Some('=') => Ok(Token::ShiftRightAssign),
-                        _ => Ok(Token::ShiftRight),
-                    },
-                    _ => Ok(Token::GreaterThan),
+                    Some('>') => Ok(Token::GreaterThan),
+                    _ => Ok(Token::RAngle),
                 },
                 Some('<') => match consume_if!('=' | '<') {
                     Some('=') => Ok(Token::LessThanEq),
-                    Some('<') => match consume_if!('=') {
-                        Some('=') => Ok(Token::ShiftLeftAssign),
-                        _ => Ok(Token::ShiftLeft),
-                    },
-                    _ => Ok(Token::LessThan),
+                    Some('<') => Ok(Token::LessThan),
+                    _ => Ok(Token::LAngle),
                 },
                 Some('!') => match consume_if!('=') {
                     Some('=') => Ok(Token::NotEquals),

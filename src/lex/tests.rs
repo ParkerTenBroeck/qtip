@@ -29,7 +29,7 @@ fn lex_err(input: &str) -> LexError {
 
 #[test]
 fn lexes_single_char_tokens() {
-    let tokens = lex_all_tokens("(){}[]~,?;:@#").unwrap();
+    let tokens = lex_all_tokens("(){}[]<>~,?;:@#").unwrap();
     assert_eq!(
         tokens,
         vec![
@@ -39,6 +39,8 @@ fn lexes_single_char_tokens() {
             Token::RBrace,
             Token::LBracket,
             Token::RBracket,
+            Token::LAngle,
+            Token::RAngle,
             Token::BitwiseNot,
             Token::Comma,
             Token::QuestionMark,
@@ -53,7 +55,7 @@ fn lexes_single_char_tokens() {
 
 #[test]
 fn lexes_basic_operators() {
-    let tokens = lex_all_tokens("+ - * / % = > < ! | & ^ .").unwrap();
+    let tokens = lex_all_tokens("+ - * / % = ! | & ^ .").unwrap();
     assert_eq!(
         tokens,
         vec![
@@ -63,8 +65,6 @@ fn lexes_basic_operators() {
             Token::Slash,
             Token::Percent,
             Token::Assign,
-            Token::GreaterThan,
-            Token::LessThan,
             Token::LogicalNot,
             Token::BitwiseOr,
             Token::Ampersand,
@@ -78,7 +78,7 @@ fn lexes_basic_operators() {
 #[test]
 fn lexes_compound_operators() {
     let tokens = lex_all_tokens(
-        "+= ++ -= -- -> *= /= %= => == >= >> >>= <= << <<= != |= || &= && ^= .. ..=",
+        "+= ++ -= -- -> *= /= %= => == >= >> <= << != |= || &= && ^= .. ..=",
     )
     .unwrap();
 
@@ -96,11 +96,9 @@ fn lexes_compound_operators() {
             Token::BigRightArrow,
             Token::Equals,
             Token::GreaterThanEq,
-            Token::ShiftRight,
-            Token::ShiftRightAssign,
+            Token::GreaterThan,
             Token::LessThanEq,
-            Token::ShiftLeft,
-            Token::ShiftLeftAssign,
+            Token::LessThan,
             Token::NotEquals,
             Token::OrAssign,
             Token::LogicalOr,

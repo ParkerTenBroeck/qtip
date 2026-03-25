@@ -8,6 +8,8 @@ pub enum Token<'a> {
     RBrace,
     LBracket,
     RBracket,
+    LAngle,
+    RAngle,
 
     Plus,
     Minus,
@@ -17,8 +19,6 @@ pub enum Token<'a> {
     BitwiseOr,
     BitwiseXor,
     BitwiseNot,
-    ShiftLeft,
-    ShiftRight,
     LogicalAnd,
     LogicalOr,
     LogicalNot,
@@ -50,8 +50,6 @@ pub enum Token<'a> {
     OrAssign,
     AndAssign,
     XorAssign,
-    ShiftRightAssign,
-    ShiftLeftAssign,
 
     Percent,
     RangeInclusive,

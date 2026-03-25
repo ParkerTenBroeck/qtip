@@ -159,8 +159,8 @@ impl<'a> Parser<'a> {
                 Token::Ampersand if BinOp::And.precedence() >= min_prec => BinOp::And,
                 Token::LogicalAnd if BinOp::And.precedence() >= min_prec => BinOp::And,
                 Token::BitwiseXor if BinOp::Xor.precedence() >= min_prec => BinOp::Xor,
-                Token::ShiftLeft if BinOp::Shl.precedence() >= min_prec => BinOp::Shl,
-                Token::ShiftRight if BinOp::Shr.precedence() >= min_prec => BinOp::Shr,
+                // Token::ShiftLeft if BinOp::Shl.precedence() >= min_prec => BinOp::Shl,
+                // Token::ShiftRight if BinOp::Shr.precedence() >= min_prec => BinOp::Shr,
                 Token::GreaterThan if BinOp::Gt.precedence() >= min_prec => BinOp::Gt,
                 Token::GreaterThanEq if BinOp::Gte.precedence() >= min_prec => BinOp::Gte,
                 Token::LessThan if BinOp::Lt.precedence() >= min_prec => BinOp::Lt,
@@ -187,12 +187,12 @@ impl<'a> Parser<'a> {
                 Token::OrAssign if BinOp::PlusAssign.precedence() >= min_prec => BinOp::PlusAssign,
                 Token::AndAssign if BinOp::PlusAssign.precedence() >= min_prec => BinOp::PlusAssign,
                 Token::XorAssign if BinOp::PlusAssign.precedence() >= min_prec => BinOp::PlusAssign,
-                Token::ShiftRightAssign if BinOp::PlusAssign.precedence() >= min_prec => {
-                    BinOp::PlusAssign
-                }
-                Token::ShiftLeftAssign if BinOp::PlusAssign.precedence() >= min_prec => {
-                    BinOp::PlusAssign
-                }
+                // Token::ShiftRightAssign if BinOp::PlusAssign.precedence() >= min_prec => {
+                //     BinOp::PlusAssign
+                // }
+                // Token::ShiftLeftAssign if BinOp::PlusAssign.precedence() >= min_prec => {
+                //     BinOp::PlusAssign
+                // }
 
                 _ => break,
             };
