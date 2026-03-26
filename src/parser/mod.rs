@@ -12,6 +12,7 @@ pub struct Parser<'a> {
     lexer: Lexer<'a>,
     previous: S<Token<'a>>,
     current: S<Token<'a>>,
+    next: S<Token<'a>>,
 
     diag: Diagnostics<'a>,
 }
@@ -22,9 +23,11 @@ impl<'a> Parser<'a> {
             lexer,
             previous: S::new(Token::default(), Default::default()),
             current: S::new(Token::default(), Default::default()),
+            next: S::new(Token::default(), Default::default()),
 
             diag: Diagnostics::new(),
         };
+        parser.next();
         parser.next();
 
         parser
@@ -32,7 +35,8 @@ impl<'a> Parser<'a> {
 
     fn next(&mut self) -> S<Token<'a>> {
         self.previous = self.current;
-        self.current = loop {
+        self.current = self.next;
+        self.next = loop {
             match self.lexer.next_token() {
                 Ok(ok) => break ok,
                 Err(err) => todo!("{err:?}"),
@@ -48,7 +52,7 @@ impl<'a> Parser<'a> {
                 end: end.end,
             },
             src: todo!(),
-            parent: todo!(),
+            parent: None,
         }
     }
 
@@ -161,9 +165,20 @@ impl<'a> Parser<'a> {
                 Token::BitwiseXor if BinOp::Xor.precedence() >= min_prec => BinOp::Xor,
                 // Token::ShiftLeft if BinOp::Shl.precedence() >= min_prec => BinOp::Shl,
                 // Token::ShiftRight if BinOp::Shr.precedence() >= min_prec => BinOp::Shr,
-                Token::GreaterThan if BinOp::Gt.precedence() >= min_prec => BinOp::Gt,
+                Token::RAngle
+                    if self.next.val == Token::RAngle && BinOp::Gt.precedence() >= min_prec =>
+                {
+                    self.next();
+                    BinOp::Gt
+                }
+                Token::LAngle
+                    if self.next.val == Token::LAngle && BinOp::Lt.precedence() >= min_prec =>
+                {
+                    self.next();
+                    BinOp::Lt
+                }
+
                 Token::GreaterThanEq if BinOp::Gte.precedence() >= min_prec => BinOp::Gte,
-                Token::LessThan if BinOp::Lt.precedence() >= min_prec => BinOp::Lt,
                 Token::LessThanEq if BinOp::Lte.precedence() >= min_prec => BinOp::Lte,
                 Token::Equals if BinOp::Eq.precedence() >= min_prec => BinOp::Eq,
                 Token::NotEquals if BinOp::Ne.precedence() >= min_prec => BinOp::Ne,
@@ -193,7 +208,6 @@ impl<'a> Parser<'a> {
                 // Token::ShiftLeftAssign if BinOp::PlusAssign.precedence() >= min_prec => {
                 //     BinOp::PlusAssign
                 // }
-
                 _ => break,
             };
             self.next();

@@ -161,14 +161,12 @@ impl<'a> Lexer<'a> {
                     Some('=') => Ok(Token::Equals),
                     _ => Ok(Token::Assign),
                 },
-                Some('>') => match consume_if!('=' | '>') {
+                Some('>') => match consume_if!('=') {
                     Some('=') => Ok(Token::GreaterThanEq),
-                    Some('>') => Ok(Token::GreaterThan),
                     _ => Ok(Token::RAngle),
                 },
-                Some('<') => match consume_if!('=' | '<') {
+                Some('<') => match consume_if!('=') {
                     Some('=') => Ok(Token::LessThanEq),
-                    Some('<') => Ok(Token::LessThan),
                     _ => Ok(Token::LAngle),
                 },
                 Some('!') => match consume_if!('=') {

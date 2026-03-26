@@ -34,9 +34,9 @@ pub enum Token<'a> {
     Octothorp,
     Dollar,
 
-    LessThan,
+    // LessThan,
     LessThanEq,
-    GreaterThan,
+    // GreaterThan,
     GreaterThanEq,
     Equals,
     NotEquals,

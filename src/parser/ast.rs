@@ -122,7 +122,7 @@ impl BinOp {
             BinOp::Rem => 20 - 3,
 
             BinOp::Shl => 20 - 5,
-            BinOp::Shr => 20 - 5, 
+            BinOp::Shr => 20 - 5,
 
             BinOp::Lt => 20 - 6,
             BinOp::Lte => 20 - 6,

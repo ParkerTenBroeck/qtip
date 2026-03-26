@@ -1,5 +1,5 @@
 use crate::source::SourceMap;
 
-pub struct Compiler{
+pub struct Compiler {
     sources: SourceMap,
 }
