@@ -1,31 +1,34 @@
 pub mod ast;
-pub mod diag;
 
 use crate::{
+    context::Context,
+    diag::LexerError,
     lex::{Lexer, Token},
     node::Node,
-    parser::{ast::BinOp, diag::Diagnostics},
+    parser::ast::BinOp,
+    source::Source,
     span::{Span, Spanned as S},
 };
 
 pub struct Parser<'a> {
+    src: &'a Source,
+    ctx: Context<'a>,
+
     lexer: Lexer<'a>,
     previous: S<Token<'a>>,
     current: S<Token<'a>>,
     next: S<Token<'a>>,
-
-    diag: Diagnostics<'a>,
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(lexer: Lexer<'a>) -> Self {
+    pub fn new(ctx: Context<'a>, src: &'a Source) -> Self {
         let mut parser = Self {
-            lexer,
+            src,
+            ctx,
+            lexer: Lexer::new(&src.contents),
             previous: S::new(Token::default(), Default::default()),
             current: S::new(Token::default(), Default::default()),
             next: S::new(Token::default(), Default::default()),
-
-            diag: Diagnostics::new(),
         };
         parser.next();
         parser.next();
@@ -39,7 +42,14 @@ impl<'a> Parser<'a> {
         self.next = loop {
             match self.lexer.next_token() {
                 Ok(ok) => break ok,
-                Err(err) => todo!("{err:?}"),
+                Err(err) => self.ctx.report(LexerError {
+                    msg: format!("{}", err.val),
+                    node: Node {
+                        range: err.span,
+                        src: self.src.idx,
+                        parent: None,
+                    },
+                }),
             }
         };
         self.previous
@@ -51,7 +61,7 @@ impl<'a> Parser<'a> {
                 start: start.start,
                 end: end.end,
             },
-            src: todo!(),
+            src: self.src.idx,
             parent: None,
         }
     }

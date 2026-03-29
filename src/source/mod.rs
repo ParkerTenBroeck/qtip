@@ -1,5 +1,8 @@
 use std::{
-    cell::UnsafeCell, collections::HashMap, path::{Path, PathBuf}, pin::Pin
+    cell::UnsafeCell,
+    collections::HashMap,
+    path::{Path, PathBuf},
+    pin::Pin,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -20,21 +23,19 @@ impl SourceMap {
 
     #[allow(clippy::mut_from_ref)]
     unsafe fn inner(&self) -> &mut SourceMapInner {
-        unsafe{
-            self.map.get().as_mut().unwrap_unchecked()
-        }
+        unsafe { self.map.get().as_mut().unwrap_unchecked() }
     }
 
     pub fn load(&self, path: &Path) -> std::io::Result<&Source> {
-        unsafe{self.inner()}.load(path)
+        unsafe { self.inner() }.load(path)
     }
 
     pub fn get_idx(&self, idx: SrcIdx) -> Option<&Source> {
-        unsafe{self.inner()}.get_idx(idx)
+        unsafe { self.inner() }.get_idx(idx)
     }
 
     pub fn get_path(&self, path: &Path) -> Option<&Source> {
-        unsafe{self.inner()}.get_path(path)
+        unsafe { self.inner() }.get_path(path)
     }
 }
 

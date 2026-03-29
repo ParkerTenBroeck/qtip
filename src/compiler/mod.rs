@@ -1,31 +1,35 @@
 use std::path::Path;
 
-use crate::{parser::{ast, diag::Diagnostics}, source::SourceMap};
+use crate::{context::Context, diag::Diagnostics, parser::{Parser, ast}, source::SourceMap};
 
 pub struct Compiler<'a> {
     sources: &'a SourceMap,
     programs: Vec<ast::Program<'a>>,
-    diag: Diagnostics<'a>,
+    ctx: Context<'a>,
 }
 
-impl<'a> Compiler<'a>{
-    pub fn compile(sources: &'a SourceMap) -> Diagnostics<'a>{
-        Self{
+impl<'a> Compiler<'a> {
+    pub fn compile(sources: &'a SourceMap) -> Diagnostics<'a> {
+        Self {
             sources,
             programs: vec![],
-            diag: Diagnostics::new(),
-        }._compile()
+            ctx: Context::new(sources),
+        }
+        ._compile()
     }
 
     fn parse(&mut self, program: &Path) {
-        // match self.sources.load(program){
-        //     Ok(src) => src.contents,
-        //     Err(_) => todo!(),
-        // }
+        match self.sources.load(program){
+            Ok(src) => {
+                let program = Parser::new(self.ctx.clone(), src).parse();
+                self.programs.push(program);
+            },
+            Err(_) => todo!(),
+        }
     }
-
-    fn _compile(mut self) -> Diagnostics<'a>{
-        
-        self.diag
+    
+    fn _compile(mut self) -> Diagnostics<'a> {
+        self.parse("main.tw".as_ref());
+        self.ctx.diag.take()
     }
 }

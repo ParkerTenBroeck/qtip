@@ -78,8 +78,7 @@ fn lexes_basic_operators() {
 #[test]
 fn lexes_compound_operators() {
     let tokens =
-        lex_all_tokens("+= ++ -= -- -> *= /= %= => == >= <= != |= || &= && ^= .. ..=")
-            .unwrap();
+        lex_all_tokens("+= ++ -= -- -> *= /= %= => == >= <= != |= || &= && ^= .. ..=").unwrap();
 
     assert_eq!(
         tokens,

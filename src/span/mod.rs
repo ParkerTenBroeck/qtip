@@ -16,6 +16,12 @@ pub struct Span {
     pub end: usize,
 }
 
+impl From<Span> for std::ops::Range<usize> {
+    fn from(value: Span) -> Self {
+        value.start..value.end
+    }
+}
+
 impl Span {
     pub fn new(start: usize, end: usize) -> Self {
         Span { start, end }
