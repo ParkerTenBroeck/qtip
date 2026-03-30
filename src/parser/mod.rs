@@ -2,7 +2,7 @@ pub mod ast;
 
 use crate::{
     context::Context,
-    diag::LexerError,
+    diag::{Diagnostic, LexerError},
     lex::{Lexer, Token},
     node::Node,
     parser::ast::BinOp,
@@ -19,6 +19,9 @@ pub struct Parser<'a> {
     current: S<Token<'a>>,
     next: S<Token<'a>>,
 }
+
+
+type PResult<T> = Result<T, Box<dyn Diagnostic>>;
 
 impl<'a> Parser<'a> {
     pub fn new(ctx: Context<'a>, src: &'a Source) -> Self {

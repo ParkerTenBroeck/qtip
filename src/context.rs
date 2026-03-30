@@ -19,7 +19,7 @@ impl<'a> Context<'a> {
         }
     }
 
-    pub fn report(&self, diag: impl Diagnostic<'a>) {
+    pub fn report(&self, diag: impl Diagnostic) {
         self.diag.borrow_mut().report(self.sources, diag);
     }
 }
