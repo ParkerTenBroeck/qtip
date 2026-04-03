@@ -2,7 +2,7 @@ pub mod ast;
 
 use crate::{
     context::Context,
-    diag::{Diagnostic, LexerError},
+    diag::{Diagnostic},
     lex::{Lexer, Token},
     node::Node,
     parser::ast::BinOp,
@@ -39,13 +39,15 @@ impl<'a> Parser<'a> {
     }
 
     fn next(&mut self) -> S<Token<'a>> {
+        use crate::diag::lex::*;
+
         self.previous = self.current;
         self.current = self.next;
         self.next = loop {
             match self.lexer.next_token() {
                 Ok(ok) => break ok,
                 Err(err) => self.ctx.report(LexerError {
-                    msg: format!("{}", err.val),
+                    msg: err.val,
                     node: Node {
                         range: err.span,
                         src: self.src.idx,

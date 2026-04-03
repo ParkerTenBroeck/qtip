@@ -31,7 +31,7 @@ impl<'a> Compiler<'a> {
                 self.programs.push(program);
             }
             Err(err) => {
-                self.ctx.report(diag::FileError {
+                self.ctx.report(diag::other::FileError {
                     err,
                     file: program.to_path_buf(),
                     node,

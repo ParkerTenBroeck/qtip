@@ -1,9 +1,10 @@
-use std::path::PathBuf;
+pub mod lex;
+pub mod parse;
+pub mod other;
 
 use annotate_snippets::*;
-use proc_macros::Diagnostic;
 
-use crate::{context::Context, node::Node};
+use crate::{context::Context, node::Node, source::SrcIdx};
 
 pub type Diag<'a> = Vec<Group<'a>>;
 
@@ -26,7 +27,8 @@ impl<'a> std::fmt::Display for Diagnostics<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let renderer = annotate_snippets::Renderer::styled();
         for diag in &self.diags {
-            f.write_str(&renderer.render(&diag))?;
+            f.write_str(&renderer.render(diag))?;
+            writeln!(f)?;
             writeln!(f)?;
         }
         Ok(())
@@ -37,97 +39,67 @@ pub trait Diagnostic {
     fn to_diag<'a>(self, ctx: &Context<'a>) -> Diag<'a>;
 }
 
-#[derive(Diagnostic)]
-#[diag("{msg}")]
-#[note("meow")]
-pub struct LexerError {
-    #[primary_node]
-    #[label("here")]
-    #[note("weee")]
-    pub node: Node,
-    pub msg: String,
+pub trait Subdiagnostic {
+    fn add_to_diag<'a>(
+        self,
+        ctx: &Context<'a>,
+        group: &mut Group<'a>,
+        groups: &mut Diag<'a>,
+    );
 }
 
+pub fn append_to_group<'a>(group: &mut Group<'a>, element: impl Into<Element<'a>>) {
+    let current = std::mem::replace(group, Group::with_level(Level::ERROR));
+    *group = current.element(element);
+}
 
-impl Diagnostic for LexerError {
-    #[allow(unused)]
-    fn to_diag<'a>(self, ctx: &Context<'a>) -> Diag<'a> {
-        let Self { node, msg } = self;
-        let mut group = Group::with_title(Level::ERROR.primary_title(format!("{msg}")));
-        group = group.element(Level::NOTE.message(format!("meow")));
-        let src = ctx.sources.get_idx(node.src).unwrap();
-        let snippet = Snippet::source(&src.contents).path(src.path.as_os_str().to_str().unwrap());
-        group = group.element(
-            Level::NOTE
-                .primary_title(format!("weee")).element(Level::NOTE.message("meow"))
-                .annotation(AnnotationKind::Primary.span(node.range.into())),
-        );
-        vec![group]
+pub fn annotation_snippets<'a>(
+    ctx: &Context<'a>,
+    items: impl IntoIterator<Item = (Node, Annotation<'a>)>,
+) -> Vec<Snippet<'a, Annotation<'a>>> {
+    let mut grouped: Vec<(SrcIdx, Vec<Annotation<'a>>)> = Vec::new();
+
+    for (node, annotation) in items {
+        if let Some((_, annotations)) = grouped.iter_mut().find(|(src, _)| *src == node.src) {
+            annotations.push(annotation);
+        } else {
+            grouped.push((node.src, vec![annotation]));
+        }
     }
-}
 
-// impl Diagnostic for LexerError {
-//     fn to_diag<'a>(self, ctx: &Context<'a>) -> Diag<'a> {
-//         let group = Group::with_title(Level::ERROR.primary_title(format!("failed to load file")));
-
-//         let src = ctx.sources.get_idx(self.node.src).unwrap();
-//         let snippet = Snippet::source(&src.contents)
-//             .path(src.path.as_os_str().to_str().unwrap())
-//             .annotation(AnnotationKind::Primary.span(self.node.range.into()));
-
-//         let group = group.element(snippet).element(Level::HELP.message("me"));
-
-//         let snippet = Snippet::source(&src.contents)
-//             .path(src.path.as_os_str().to_str().unwrap())
-//             .annotation(
-//                 AnnotationKind::Context
-//                     .span(self.node.range.into())
-//                     .label("meow"),
-//             );
-
-//         let group = group.element(snippet);
-//         // .annotation(AnnotationKind::Context.span(span).)
-
-//         vec![
-//             group,
-//             Group::with_title(Level::HELP.secondary_title("emwo")),
-//         ]
-//     }
-// }
-
-pub struct FileError {
-    pub err: std::io::Error,
-    pub file: PathBuf,
-    pub node: Option<Node>,
-}
-
-impl Diagnostic for FileError {
-    fn to_diag<'a>(self, ctx: &Context<'a>) -> Diag<'a> {
-        let snippet = self.node.map(|node| {
-            let src = ctx.sources.get_idx(node.src).unwrap();
+    grouped
+        .into_iter()
+        .map(|(src_idx, annotations)| {
+            let src = ctx.sources.get_idx(src_idx).unwrap();
             Snippet::source(&src.contents)
-                .path(src.path.as_os_str().to_str().unwrap())
-                .annotation(AnnotationKind::Primary.span(node.range.into()))
-            // .annotation(AnnotationKind::Context.span(span).)
-        });
-
-        // 'level{
-
-        // }
-        
-        // self.node.unwrap().src
-        // Level::NOTE.primary_title("text").element(section)
-
-        Group::with_title(Level::HELP.secondary_title("emwo"));
-        // Level::ERROR
-        //     .primary_title(format!(
-        //         "failed to load file {}: {}",
-        //         self.file.display(),
-        //         self.err
-        //     )).element(Level::HELP)
-        //     .elements(snippet)
-        todo!()
-    }
+                .path(src.path.display().to_string())
+                .annotations(annotations)
+        })
+        .collect()
 }
 
-pub struct ExpectedItem {}
+pub fn patch_snippets<'a>(
+    ctx: &Context<'a>,
+    items: impl IntoIterator<Item = (Node, Patch<'a>)>,
+) -> Vec<Snippet<'a, Patch<'a>>> {
+    let mut grouped: Vec<(SrcIdx, Vec<Patch<'a>>)> = Vec::new();
+
+    for (node, patch) in items {
+        if let Some((_, patches)) = grouped.iter_mut().find(|(src, _)| *src == node.src) {
+            patches.push(patch);
+        } else {
+            grouped.push((node.src, vec![patch]));
+        }
+    }
+
+    grouped
+        .into_iter()
+        .map(|(src_idx, patches)| {
+            let src = ctx.sources.get_idx(src_idx).unwrap();
+            Snippet::source(&src.contents)
+                .path(src.path.display().to_string())
+                .patches(patches)
+        })
+        .collect()
+}
+
