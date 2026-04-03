@@ -20,7 +20,6 @@ pub struct Parser<'a> {
     next: S<Token<'a>>,
 }
 
-
 type PResult<T> = Result<T, Box<dyn Diagnostic>>;
 
 impl<'a> Parser<'a> {

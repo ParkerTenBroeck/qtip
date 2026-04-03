@@ -1,12 +1,15 @@
-use std::{path::PathBuf, process::Output};
+use std::path::PathBuf;
 
 use annotate_snippets::*;
+use proc_macros::Diagnostic;
 
-use crate::{node::Node, source::SourceMap};
+use crate::{context::Context, node::Node};
+
+pub type Diag<'a> = Vec<Group<'a>>;
 
 #[derive(Default)]
 pub struct Diagnostics<'a> {
-    diags: Vec<Group<'a>>,
+    diags: Vec<Diag<'a>>,
 }
 
 impl<'a> Diagnostics<'a> {
@@ -14,152 +17,81 @@ impl<'a> Diagnostics<'a> {
         Diagnostics { diags: vec![] }
     }
 
-    pub fn report(&mut self, sources: &'a SourceMap, report: impl Diagnostic) {
-        self.diags.push(report.to_diag(sources));
+    pub fn report(&mut self, ctx: &Context<'a>, report: impl Diagnostic) {
+        self.diags.push(report.to_diag(ctx));
     }
 }
 
 impl<'a> std::fmt::Display for Diagnostics<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let renderer = annotate_snippets::Renderer::styled();
-        f.write_str(&renderer.render(&self.diags))
+        for diag in &self.diags {
+            f.write_str(&renderer.render(&diag))?;
+            writeln!(f)?;
+        }
+        Ok(())
     }
 }
 
 pub trait Diagnostic {
-    fn to_diag<'a>(self, sources: &'a SourceMap) -> Group<'a>;
+    fn to_diag<'a>(self, ctx: &Context<'a>) -> Diag<'a>;
 }
 
-macro_rules! diagnostic {
-    (
-        $(#$top_attr:tt)*
-        $vis:vis struct $name:ident {
-            $(
-                $(#$field_attr:tt)*
-                pub $field:ident : $ty:ty
-            ),* $(,)?
-        }
-    ) => {
-        $vis struct $name {
-            $(
-                pub $field : $ty
-            ),*
-        }
-
-        impl Diagnostic for $name {
-            #[allow(unused)]
-            fn to_diag<'a>(self, sources: &'a SourceMap) -> Group<'a> {
-                let Self {
-                    $(
-                        $field
-                    ),*
-                } = self;
-
-                let diag = Level::ERROR;
-
-                diagnostic!(diag, @top_first: $(#$top_attr)*);
-                $(
-                    diagnostic!(diag, sources, @field:  $(#$field_attr)*, $field : $ty);
-                )*
-                diagnostic!(diag, @top_last: $(#$top_attr)*);
-
-                diag
-            }
-        }
-    };
-
-
-    // -------------------------
-
-    ($diag:ident, @top_first: #[diag($lit:tt)] $(#$rem:tt)*) => {
-        let $diag = $diag.primary_title(format!($lit));
-        diagnostic!($diag, @top_first: $(#$rem)*);
-    };
-
-    ($diag:ident, @top_first: #[note($lit:tt)] $(#$rem:tt)*) => {
-        diagnostic!($diag, @top_first: $(#$rem)*);
-    };
-    
-    ($diag:ident, @top_first: ) => {};
-
-    ($diag:ident, @top_first: $(#$top_attr:tt)*) => {
-        compile_error!(stringify!(unknown diagnostic attribute $(#$top_attr)*))
-    };
-
-    // -------------------------
-
-    ($diag:ident, @top_last: #[diag($lit:tt)] $(#$rem:tt)*) => {
-        diagnostic!($diag, @top_last: $(#$rem)*);
-    };
-
-    ($diag:ident, @top_last: #[note($lit:tt)] $(#$rem:tt)*) => {
-        let $diag = $diag.element(Level::HELP.message(format!($lit)));
-        diagnostic!($diag, @top_last: $(#$rem)*);
-    };
-    
-    ($diag:ident, @top_last: ) => {};
-
-    ($diag:ident, @top_last: $(#$top_attr:tt)*) => {
-        compile_error!(stringify!(unknown diagnostic attribute $(#$top_attr)*))
-    };
-    
-
-    ($diag:ident, $sources:ident, @field: $(#$rem:tt)*, $field:ident : Node) => {
-        let snippet = $field.map(|node| {
-            let src = $sources.get_idx(node.src).unwrap();
-            Snippet::source(&src.contents)
-                .path(src.path.as_os_str().to_str().unwrap())
-                .annotation(AnnotationKind::Primary.span(node.range.into()))
-        });
-        diagnostic!($diag, $sources, @field: $(#$rem)*, $field : $ty);
-    };
-    
-    ($diag:ident, $sources:ident, @field: #[primary_node] $(#$rem:tt)*, $field:ident : $ty:ty) => {
-        
-        let src = $sources.get_idx($field.src).unwrap();
-        let snippet = Snippet::source(&src.contents)
-            .path(src.path.as_os_str().to_str().unwrap())
-            .annotation(AnnotationKind::Primary.span($field.range.into()));
-
-        let $diag = $diag.element(snippet);
-        
-        diagnostic!($diag, $sources, @field: $(#$rem)*, $field : $ty);
-    };
-    
-    ($diag:ident, $sources:ident, @field: , $field:ident : $ty:ty) => {
-
-    };
-    
-    ($diag:ident, $sources:ident, @field: $(#$field_attr:tt)*, $field:ident : $ty:ty) => {
-
-        compile_error!(stringify!(unknown diagnostic field attribute $(#$field_attr)*, $field : $ty))
-    };
+#[derive(Diagnostic)]
+#[diag("{msg}")]
+#[note("meow")]
+pub struct LexerError {
+    #[primary_node]
+    #[label("here")]
+    #[note("weee")]
+    pub node: Node,
+    pub msg: String,
 }
 
-diagnostic!(
-    #[diag("{msg}")]
-    #[note("meow")]
-    pub struct LexerError {
-        #[primary_node]
-        // #[label("here")]
-        pub node: Node,
-        pub msg: String,
+
+impl Diagnostic for LexerError {
+    #[allow(unused)]
+    fn to_diag<'a>(self, ctx: &Context<'a>) -> Diag<'a> {
+        let Self { node, msg } = self;
+        let mut group = Group::with_title(Level::ERROR.primary_title(format!("{msg}")));
+        group = group.element(Level::NOTE.message(format!("meow")));
+        let src = ctx.sources.get_idx(node.src).unwrap();
+        let snippet = Snippet::source(&src.contents).path(src.path.as_os_str().to_str().unwrap());
+        group = group.element(
+            Level::NOTE
+                .primary_title(format!("weee")).element(Level::NOTE.message("meow"))
+                .annotation(AnnotationKind::Primary.span(node.range.into())),
+        );
+        vec![group]
     }
-);
-
-// pub struct LexerError {
-//     pub msg: String,
-//     pub node: Node,
-// }
+}
 
 // impl Diagnostic for LexerError {
-//     fn to_diag<'a>(self, sources: &'a SourceMap) -> Group<'a> {
-//         let src = sources.get_idx(self.node.src).unwrap();
+//     fn to_diag<'a>(self, ctx: &Context<'a>) -> Diag<'a> {
+//         let group = Group::with_title(Level::ERROR.primary_title(format!("failed to load file")));
+
+//         let src = ctx.sources.get_idx(self.node.src).unwrap();
 //         let snippet = Snippet::source(&src.contents)
 //             .path(src.path.as_os_str().to_str().unwrap())
 //             .annotation(AnnotationKind::Primary.span(self.node.range.into()));
 
-//         Level::ERROR.primary_title(self.msg).element(snippet)
+//         let group = group.element(snippet).element(Level::HELP.message("me"));
+
+//         let snippet = Snippet::source(&src.contents)
+//             .path(src.path.as_os_str().to_str().unwrap())
+//             .annotation(
+//                 AnnotationKind::Context
+//                     .span(self.node.range.into())
+//                     .label("meow"),
+//             );
+
+//         let group = group.element(snippet);
+//         // .annotation(AnnotationKind::Context.span(span).)
+
+//         vec![
+//             group,
+//             Group::with_title(Level::HELP.secondary_title("emwo")),
+//         ]
 //     }
 // }
 
@@ -170,25 +102,32 @@ pub struct FileError {
 }
 
 impl Diagnostic for FileError {
-    fn to_diag<'a>(self, sources: &'a SourceMap) -> Group<'a> {
+    fn to_diag<'a>(self, ctx: &Context<'a>) -> Diag<'a> {
         let snippet = self.node.map(|node| {
-            let src = sources.get_idx(node.src).unwrap();
+            let src = ctx.sources.get_idx(node.src).unwrap();
             Snippet::source(&src.contents)
                 .path(src.path.as_os_str().to_str().unwrap())
                 .annotation(AnnotationKind::Primary.span(node.range.into()))
+            // .annotation(AnnotationKind::Context.span(span).)
         });
 
-        Level::ERROR
-            .primary_title(format!(
-                "failed to load file {}: {}",
-                self.file.display(),
-                self.err
-            ))
-            .elements(snippet)
+        // 'level{
+
+        // }
+        
+        // self.node.unwrap().src
+        // Level::NOTE.primary_title("text").element(section)
+
+        Group::with_title(Level::HELP.secondary_title("emwo"));
+        // Level::ERROR
+        //     .primary_title(format!(
+        //         "failed to load file {}: {}",
+        //         self.file.display(),
+        //         self.err
+        //     )).element(Level::HELP)
+        //     .elements(snippet)
+        todo!()
     }
 }
 
-
-pub struct ExpectedItem{
-
-}
+pub struct ExpectedItem {}

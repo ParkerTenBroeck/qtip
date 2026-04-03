@@ -7,3 +7,7 @@ edition = "2024"
 [dependencies]
 annotate-snippets = "*"
 bumpalo = "*"
+proc_macros = {path = "./proc_macros"}
+
+[workspace]
+members = ["proc_macros"]
