@@ -2,9 +2,9 @@ use proc_macro::TokenStream;
 use proc_macro2::{Span as ProcSpan, TokenStream as TokenStream2};
 use quote::quote;
 use syn::{
-    Attribute, Data, DataEnum, DataStruct, DeriveInput, Error, Field, Fields, GenericArgument,
-    Expr, Ident, LitStr, PathArguments, Result, Token, Type, parse::Parse, parse::ParseStream,
-    parse_macro_input, spanned::Spanned,
+    Attribute, Data, DataEnum, DataStruct, DeriveInput, Error, Expr, Field, Fields,
+    GenericArgument, Ident, LitStr, PathArguments, Result, Token, Type, parse::Parse,
+    parse::ParseStream, parse_macro_input, spanned::Spanned,
 };
 
 struct DiagAttr {
@@ -38,10 +38,7 @@ impl Parse for DiagAttr {
             }
         }
 
-        Ok(Self {
-            title,
-            level,
-        })
+        Ok(Self { title, level })
     }
 }
 
@@ -154,7 +151,7 @@ fn expand_struct(input: DeriveInput, data: DataStruct) -> Result<TokenStream2> {
 
     Ok(quote! {
         impl #impl_generics crate::diag::Diagnostic for #name #ty_generics #where_clause {
-            fn to_diag<'a>(self, ctx: &crate::context::Context<'a>) -> crate::diag::Diag<'a> {
+            fn to_diag<'__context_lifetime>(self, ctx: &crate::context::Context<'__context_lifetime>) -> crate::diag::Diag<'__context_lifetime> {
                 #body
             }
         }
@@ -181,7 +178,7 @@ fn expand_enum(input: DeriveInput, data: DataEnum) -> Result<TokenStream2> {
 
     Ok(quote! {
         impl #impl_generics crate::diag::Diagnostic for #name #ty_generics #where_clause {
-            fn to_diag<'a>(self, ctx: &crate::context::Context<'a>) -> crate::diag::Diag<'a> {
+            fn to_diag<'__context_lifetime>(self, ctx: &crate::context::Context<'__context_lifetime>) -> crate::diag::Diag<'__context_lifetime> {
                 match self {
                     #( #arms ),*
                 }
@@ -198,11 +195,11 @@ fn expand_subdiagnostic_struct(input: DeriveInput, data: DataStruct) -> Result<T
 
     Ok(quote! {
         impl #impl_generics crate::diag::Subdiagnostic for #name #ty_generics #where_clause {
-            fn add_to_diag<'a>(
+            fn add_to_diag<'__context_lifetime>(
                 self,
-                ctx: &crate::context::Context<'a>,
-                group: &mut ::annotate_snippets::Group<'a>,
-                groups: &mut crate::diag::Diag<'a>,
+                ctx: &crate::context::Context<'__context_lifetime>,
+                group: &mut ::annotate_snippets::Group<'__context_lifetime>,
+                groups: &mut crate::diag::Diag<'__context_lifetime>,
             ) {
                 #body
             }
@@ -230,11 +227,11 @@ fn expand_subdiagnostic_enum(input: DeriveInput, data: DataEnum) -> Result<Token
 
     Ok(quote! {
         impl #impl_generics crate::diag::Subdiagnostic for #name #ty_generics #where_clause {
-            fn add_to_diag<'a>(
+            fn add_to_diag<'__context_lifetime>(
                 self,
-                ctx: &crate::context::Context<'a>,
-                group: &mut ::annotate_snippets::Group<'a>,
-                groups: &mut crate::diag::Diag<'a>,
+                ctx: &crate::context::Context<'__context_lifetime>,
+                group: &mut ::annotate_snippets::Group<'__context_lifetime>,
+                groups: &mut crate::diag::Diag<'__context_lifetime>,
             ) {
                 match self {
                     #( #arms ),*
@@ -260,10 +257,14 @@ fn expand_body(attrs: &[Attribute], fields: &Fields, is_struct: bool) -> Result<
     Ok(quote! {
         #bind_self
         let mut groups = Vec::new();
+        let mut pending_annotations = Vec::new();
         let mut group = ::annotate_snippets::Group::with_title(
             ::annotate_snippets::Level::#level.primary_title(#title)
         );
         #( #field_handlers )*
+        for snippet in crate::diag::annotation_snippets(ctx, pending_annotations) {
+            group = group.element(snippet);
+        }
         #( #group_messages )*
         groups.insert(0, group);
         groups
@@ -384,20 +385,30 @@ fn expand_field_handlers(fields: &Fields) -> Result<Vec<TokenStream2>> {
         let binding = field_binding(field, idx)?;
         let attrs = parse_field_attrs(field)?;
 
-        if attrs.suggestion {
-            return Err(Error::new(
-                field.span(),
-                "#[suggestion] is not supported yet",
-            ));
-        }
-
         if attrs.primary_node {
-            handlers.push(expand_primary_node_handler(&binding, &field.ty, &attrs.labels)?);
+            handlers.push(expand_primary_node_handler(
+                &binding,
+                &field.ty,
+                &attrs.labels,
+            )?);
         } else if !attrs.labels.is_empty() {
-            handlers.push(expand_context_label_handler(&binding, &field.ty, &attrs.labels)?);
+            handlers.push(expand_context_label_handler(
+                &binding,
+                &field.ty,
+                &attrs.labels,
+            )?);
         }
 
-        handlers.extend(expand_field_message_handlers(&binding, &field.ty, &attrs.notes)?);
+        handlers.extend(expand_field_message_handlers(
+            &binding,
+            &field.ty,
+            &attrs.notes,
+        )?);
+        if let Some(suggestion) = attrs.suggestion.as_ref() {
+            handlers.push(expand_diagnostic_suggestion_handler(
+                &binding, &field.ty, suggestion,
+            )?);
+        }
         if attrs.subdiagnostic {
             handlers.push(expand_subdiagnostic_field_handler(&binding, &field.ty)?);
         }
@@ -418,27 +429,54 @@ fn expand_primary_node_handler(
     ty: &Type,
     labels: &[LitStr],
 ) -> Result<TokenStream2> {
-    let annotation = primary_annotation_tokens(quote!(node.range.into()), labels);
+    let primary_label = labels
+        .first()
+        .map(format_template)
+        .transpose()?
+        .map(|label| quote!(.label(#label)));
+    let extra_labels = labels
+        .iter()
+        .skip(1)
+        .map(format_template)
+        .collect::<Result<Vec<_>>>()?;
 
     if is_type_named(ty, "Node") {
         Ok(quote! {
             {
                 let node = #binding;
-                let src = ctx.sources.get_idx(node.src).unwrap();
-                let snippet = ::annotate_snippets::Snippet::source(&src.contents)
-                    .path(src.path.display().to_string())
-                    #annotation;
-                group = group.element(snippet);
+                pending_annotations.push((
+                    node,
+                    ::annotate_snippets::AnnotationKind::Primary
+                        .span(node.span.into())
+                        #primary_label,
+                ));
+                #(
+                    pending_annotations.push((
+                        node,
+                        ::annotate_snippets::AnnotationKind::Context
+                            .span(node.span.into())
+                            .label(#extra_labels),
+                    ));
+                )*
             }
         })
     } else if is_option_of_named(ty, "Node") {
         Ok(quote! {
             if let Some(node) = #binding {
-                let src = ctx.sources.get_idx(node.src).unwrap();
-                let snippet = ::annotate_snippets::Snippet::source(&src.contents)
-                    .path(src.path.display().to_string())
-                    #annotation;
-                group = group.element(snippet);
+                pending_annotations.push((
+                    node,
+                    ::annotate_snippets::AnnotationKind::Primary
+                        .span(node.span.into())
+                        #primary_label,
+                ));
+                #(
+                    pending_annotations.push((
+                        node,
+                        ::annotate_snippets::AnnotationKind::Context
+                            .span(node.span.into())
+                            .label(#extra_labels),
+                    ));
+                )*
             }
         })
     } else {
@@ -454,14 +492,13 @@ fn expand_context_label_handler(
     ty: &Type,
     labels: &[LitStr],
 ) -> Result<TokenStream2> {
-    let annotation = context_annotation_tokens(quote!(node.range.into()), labels);
     let grouped_annotations = labels.iter().map(|label| {
         let label = format_template(label).unwrap();
         quote! {
-            annotations.push((
+            pending_annotations.push((
                 node,
                 ::annotate_snippets::AnnotationKind::Context
-                    .span(node.range.into())
+                    .span(node.span.into())
                     .label(#label),
             ));
         }
@@ -471,34 +508,19 @@ fn expand_context_label_handler(
         Ok(quote! {
             {
                 let node = #binding;
-                let src = ctx.sources.get_idx(node.src).unwrap();
-                let snippet = ::annotate_snippets::Snippet::source(&src.contents)
-                    .path(src.path.display().to_string())
-                    #annotation;
-                group = group.element(snippet);
+                #( #grouped_annotations )*
             }
         })
     } else if is_option_of_named(ty, "Node") {
         Ok(quote! {
             if let Some(node) = #binding {
-                let src = ctx.sources.get_idx(node.src).unwrap();
-                let snippet = ::annotate_snippets::Snippet::source(&src.contents)
-                    .path(src.path.display().to_string())
-                    #annotation;
-                group = group.element(snippet);
+                #( #grouped_annotations )*
             }
         })
     } else if is_vec_of_named(ty, "Node") {
         Ok(quote! {
-            let snippets = crate::diag::annotation_snippets(ctx, {
-                let mut annotations = Vec::new();
-                for node in #binding.iter().copied() {
-                    #( #grouped_annotations )*
-                }
-                annotations
-            });
-            for snippet in snippets {
-                group = group.element(snippet);
+            for node in #binding.iter().copied() {
+                #( #grouped_annotations )*
             }
         })
     } else {
@@ -535,7 +557,7 @@ fn expand_field_message_handlers(
                     let src = ctx.sources.get_idx(node.src).unwrap();
                     let snippet = ::annotate_snippets::Snippet::source(&src.contents)
                         .path(src.path.display().to_string())
-                        .annotation(::annotate_snippets::AnnotationKind::Primary.span(node.range.into()));
+                        .annotation(::annotate_snippets::AnnotationKind::Primary.span(node.span.into()));
                     groups.push(::annotate_snippets::Group::with_title(
                         ::annotate_snippets::Level::#level.secondary_title(#msg)
                     ).element(snippet));
@@ -547,7 +569,7 @@ fn expand_field_message_handlers(
                     let src = ctx.sources.get_idx(node.src).unwrap();
                     let snippet = ::annotate_snippets::Snippet::source(&src.contents)
                         .path(src.path.display().to_string())
-                        .annotation(::annotate_snippets::AnnotationKind::Primary.span(node.range.into()));
+                        .annotation(::annotate_snippets::AnnotationKind::Primary.span(node.span.into()));
                     groups.push(::annotate_snippets::Group::with_title(
                         ::annotate_snippets::Level::#level.secondary_title(#msg)
                     ).element(snippet));
@@ -564,7 +586,7 @@ fn expand_field_message_handlers(
                         #binding.iter().copied().map(|node| {
                             (
                                 node,
-                                ::annotate_snippets::AnnotationKind::Primary.span(node.range.into()),
+                                ::annotate_snippets::AnnotationKind::Primary.span(node.span.into()),
                             )
                         }),
                     );
@@ -603,6 +625,73 @@ fn expand_subdiagnostic_field_handler(binding: &Ident, ty: &Type) -> Result<Toke
         Ok(quote! {
             crate::diag::Subdiagnostic::add_to_diag(#binding, ctx, &mut group, &mut groups);
         })
+    }
+}
+
+fn expand_diagnostic_suggestion_handler(
+    binding: &Ident,
+    ty: &Type,
+    suggestion: &SuggestionAttr,
+) -> Result<TokenStream2> {
+    let message = format_template(&suggestion.message)?;
+    let code = format_template(&suggestion.code)?;
+
+    if is_type_named(ty, "Node") {
+        Ok(quote! {
+            {
+                let node = #binding;
+                let src = ctx.sources.get_idx(node.src).unwrap();
+                let snippet = ::annotate_snippets::Snippet::source(&src.contents)
+                    .path(src.path.display().to_string())
+                    .patch(::annotate_snippets::Patch::new(node.span.into(), #code));
+                groups.push(
+                    ::annotate_snippets::Group::with_title(
+                        ::annotate_snippets::Level::HELP.secondary_title(#message)
+                    )
+                    .element(snippet)
+                );
+            }
+        })
+    } else if is_option_of_named(ty, "Node") {
+        Ok(quote! {
+            if let Some(node) = #binding {
+                let src = ctx.sources.get_idx(node.src).unwrap();
+                let snippet = ::annotate_snippets::Snippet::source(&src.contents)
+                    .path(src.path.display().to_string())
+                    .patch(::annotate_snippets::Patch::new(node.span.into(), #code));
+                groups.push(
+                    ::annotate_snippets::Group::with_title(
+                        ::annotate_snippets::Level::HELP.secondary_title(#message)
+                    )
+                    .element(snippet)
+                );
+            }
+        })
+    } else if is_vec_of_named(ty, "Node") {
+        Ok(quote! {
+            if !#binding.is_empty() {
+                let snippets = crate::diag::patch_snippets(
+                    ctx,
+                    #binding.iter().copied().map(|node| {
+                        (
+                            node,
+                            ::annotate_snippets::Patch::new(node.span.into(), #code),
+                        )
+                    }),
+                );
+                groups.push(
+                    ::annotate_snippets::Group::with_title(
+                        ::annotate_snippets::Level::HELP.secondary_title(#message)
+                    )
+                    .elements(snippets)
+                );
+            }
+        })
+    } else {
+        Err(Error::new(
+            ty.span(),
+            "#[suggestion(...)] is only supported on Node, Option<Node>, or Vec<Node> fields",
+        ))
     }
 }
 
@@ -655,7 +744,7 @@ fn subdiag_fields(fields: &Fields) -> Result<SubdiagFields> {
         let binding = field_binding(field, idx)?;
         let attrs = parse_field_attrs(field)?;
 
-        if attrs.suggestion || attrs.subdiagnostic {
+        if attrs.suggestion.is_some() || attrs.subdiagnostic {
             return Err(Error::new(
                 field.span(),
                 "nested #[suggestion] and #[subdiagnostic] are not supported in #[derive(Subdiagnostic)]",
@@ -700,24 +789,24 @@ fn expand_subdiagnostic_apply(
                 )
             })?;
 
-            let annotation = context_annotation_tokens(quote!(node.range.into()), std::slice::from_ref(message));
-            expand_subdiagnostic_node_apply(primary, quote! {
-                let snippet = ::annotate_snippets::Snippet::source(&src.contents)
-                    .path(src.path.display().to_string())
-                    #annotation;
-                crate::diag::append_to_group(group, snippet);
-            })
+            let annotation =
+                context_annotation_tokens(quote!(node.span.into()), std::slice::from_ref(message));
+            expand_subdiagnostic_node_apply(
+                primary,
+                quote! {
+                    let snippet = ::annotate_snippets::Snippet::source(&src.contents)
+                        .path(src.path.display().to_string())
+                        #annotation;
+                    crate::diag::append_to_group(group, snippet);
+                },
+            )
         }
-        SubdiagnosticKind::Note(message) => expand_secondary_subdiag_group(
-            fields.primary_node.as_ref(),
-            quote!(NOTE),
-            message,
-        ),
-        SubdiagnosticKind::Help(message) => expand_secondary_subdiag_group(
-            fields.primary_node.as_ref(),
-            quote!(HELP),
-            message,
-        ),
+        SubdiagnosticKind::Note(message) => {
+            expand_secondary_subdiag_group(fields.primary_node.as_ref(), quote!(NOTE), message)
+        }
+        SubdiagnosticKind::Help(message) => {
+            expand_secondary_subdiag_group(fields.primary_node.as_ref(), quote!(HELP), message)
+        }
         SubdiagnosticKind::Suggestion(suggestion) => {
             expand_suggestion_subdiagnostic(suggestion, fields)
         }
@@ -732,17 +821,20 @@ fn expand_secondary_subdiag_group(
     let message = format_template(message)?;
 
     match primary {
-        Some(primary) => expand_subdiagnostic_node_apply(primary, quote! {
-            let snippet = ::annotate_snippets::Snippet::source(&src.contents)
-                .path(src.path.display().to_string())
-                .annotation(::annotate_snippets::AnnotationKind::Primary.span(node.range.into()));
-            groups.push(
-                ::annotate_snippets::Group::with_title(
-                    ::annotate_snippets::Level::#level.secondary_title(#message)
-                )
-                .element(snippet)
-            );
-        }),
+        Some(primary) => expand_subdiagnostic_node_apply(
+            primary,
+            quote! {
+                let snippet = ::annotate_snippets::Snippet::source(&src.contents)
+                    .path(src.path.display().to_string())
+                    .annotation(::annotate_snippets::AnnotationKind::Primary.span(node.span.into()));
+                groups.push(
+                    ::annotate_snippets::Group::with_title(
+                        ::annotate_snippets::Level::#level.secondary_title(#message)
+                    )
+                    .element(snippet)
+                );
+            },
+        ),
         None => Ok(quote! {
             groups.push(::annotate_snippets::Group::with_title(
                 ::annotate_snippets::Level::#level.secondary_title(#message)
@@ -805,17 +897,20 @@ fn expand_suggestion_subdiagnostic(
             let message = format_template(&suggestion.message)?;
             let code = format_template(&suggestion.code)?;
 
-            expand_subdiagnostic_node_apply(primary, quote! {
-                let snippet = ::annotate_snippets::Snippet::source(&src.contents)
-                    .path(src.path.display().to_string())
-                    .patch(::annotate_snippets::Patch::new(node.range.into(), #code));
-                groups.push(
-                    ::annotate_snippets::Group::with_title(
-                        ::annotate_snippets::Level::HELP.secondary_title(#message)
-                    )
-                    .element(snippet)
-                );
-            })
+            expand_subdiagnostic_node_apply(
+                primary,
+                quote! {
+                    let snippet = ::annotate_snippets::Snippet::source(&src.contents)
+                        .path(src.path.display().to_string())
+                        .patch(::annotate_snippets::Patch::new(node.span.into(), #code));
+                    groups.push(
+                        ::annotate_snippets::Group::with_title(
+                            ::annotate_snippets::Level::HELP.secondary_title(#message)
+                        )
+                        .element(snippet)
+                    );
+                },
+            )
         }
         SuggestionKind::Multipart(suggestion) => {
             let message = format_template(&suggestion.message)?;
@@ -826,23 +921,27 @@ fn expand_suggestion_subdiagnostic(
                 ));
             }
 
-            let patches = fields.suggestion_parts.iter().map(|part| {
-                let binding = &part.binding;
-                let code = format_template(&part.code)?;
-                if is_type_named(&part.ty, "Node") {
-                    Ok(quote! {
-                        (
-                            #binding,
-                            ::annotate_snippets::Patch::new(#binding.range.into(), #code),
-                        )
-                    })
-                } else {
-                    Err(Error::new(
-                        part.ty.span(),
-                        "#[suggestion_part(...)] is only supported on Node fields",
-                    ))
-                }
-            }).collect::<Result<Vec<_>>>()?;
+            let patches = fields
+                .suggestion_parts
+                .iter()
+                .map(|part| {
+                    let binding = &part.binding;
+                    let code = format_template(&part.code)?;
+                    if is_type_named(&part.ty, "Node") {
+                        Ok(quote! {
+                            (
+                                #binding,
+                                ::annotate_snippets::Patch::new(#binding.span.into(), #code),
+                            )
+                        })
+                    } else {
+                        Err(Error::new(
+                            part.ty.span(),
+                            "#[suggestion_part(...)] is only supported on Node fields",
+                        ))
+                    }
+                })
+                .collect::<Result<Vec<_>>>()?;
 
             Ok(quote! {
                 {
@@ -947,7 +1046,10 @@ fn parse_field_attrs(field: &Field) -> Result<FieldAttrs> {
                 message: parse_lit_attr(attr, "help")?,
             });
         } else if attr.path().is_ident("suggestion") {
-            attrs.suggestion = true;
+            if attrs.suggestion.is_some() {
+                return Err(Error::new(attr.span(), "duplicate #[suggestion(...)]"));
+            }
+            attrs.suggestion = Some(attr.parse_args::<SuggestionAttr>()?);
         } else if attr.path().is_ident("suggestion_part") {
             if attrs.suggestion_part.is_some() {
                 return Err(Error::new(attr.span(), "duplicate #[suggestion_part(...)]"));
@@ -972,7 +1074,7 @@ fn parse_field_attrs(field: &Field) -> Result<FieldAttrs> {
 #[derive(Default)]
 struct FieldAttrs {
     primary_node: bool,
-    suggestion: bool,
+    suggestion: Option<SuggestionAttr>,
     suggestion_part: Option<SuggestionPartAttr>,
     subdiagnostic: bool,
     labels: Vec<LitStr>,
@@ -1115,7 +1217,10 @@ fn parse_template_exprs(lit: &LitStr) -> Result<ParsedTemplate> {
                 }
 
                 if !found_end {
-                    return Err(Error::new(lit.span(), "unclosed `{$...}` in diagnostic template"));
+                    return Err(Error::new(
+                        lit.span(),
+                        "unclosed `{$...}` in diagnostic template",
+                    ));
                 }
 
                 let expr_src = s[expr_start..expr_end].trim().to_string();
@@ -1127,7 +1232,9 @@ fn parse_template_exprs(lit: &LitStr) -> Result<ParsedTemplate> {
                 let expr = syn::parse_str::<Expr>(&expr_src).map_err(|err| {
                     Error::new(
                         lit.span(),
-                        format!("invalid expression `{{${expr_src}}}` in diagnostic template: {err}"),
+                        format!(
+                            "invalid expression `{{${expr_src}}}` in diagnostic template: {err}"
+                        ),
                     )
                 })?;
 
@@ -1139,7 +1246,10 @@ fn parse_template_exprs(lit: &LitStr) -> Result<ParsedTemplate> {
         }
     }
 
-    Ok(ParsedTemplate { format_string, args })
+    Ok(ParsedTemplate {
+        format_string,
+        args,
+    })
 }
 
 struct ParsedTemplate {
@@ -1170,7 +1280,10 @@ fn is_vec_type(ty: &Type) -> bool {
     is_type_named(ty, "Vec")
 }
 
-fn inner_type_of<'a>(ty: &'a Type, container: &str) -> Option<&'a Type> {
+fn inner_type_of<'__context_lifetime>(
+    ty: &'__context_lifetime Type,
+    container: &str,
+) -> Option<&'__context_lifetime Type> {
     let Type::Path(tp) = ty else {
         return None;
     };

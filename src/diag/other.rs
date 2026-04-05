@@ -4,7 +4,6 @@ use proc_macros::Diagnostic;
 
 use crate::node::Node;
 
-
 #[derive(Diagnostic)]
 #[diag("Failed to load file `{$file.display()}` {err}")]
 pub struct FileError {

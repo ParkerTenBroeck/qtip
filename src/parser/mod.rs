@@ -2,22 +2,31 @@ pub mod ast;
 
 use crate::{
     context::Context,
-    diag::{Diagnostic},
+    diag::{
+        Diagnostic,
+        parse::{ExpectedSemi, ExpectedSymbol},
+    },
     lex::{Lexer, Token},
     node::Node,
     parser::ast::BinOp,
     source::Source,
-    span::{Span, Spanned as S},
+    span::Span,
 };
+
+#[derive(Default, Clone, Copy, PartialEq, Eq)]
+struct N<T> {
+    value: T,
+    node: Node,
+}
 
 pub struct Parser<'a> {
     src: &'a Source,
     ctx: Context<'a>,
 
     lexer: Lexer<'a>,
-    previous: S<Token<'a>>,
-    current: S<Token<'a>>,
-    next: S<Token<'a>>,
+    previous: N<Token<'a>>,
+    current: N<Token<'a>>,
+    next: N<Token<'a>>,
 }
 
 type PResult<T> = Result<T, Box<dyn Diagnostic>>;
@@ -28,9 +37,9 @@ impl<'a> Parser<'a> {
             src,
             ctx,
             lexer: Lexer::new(&src.contents),
-            previous: S::new(Token::default(), Default::default()),
-            current: S::new(Token::default(), Default::default()),
-            next: S::new(Token::default(), Default::default()),
+            previous: Default::default(),
+            current: Default::default(),
+            next: Default::default(),
         };
         parser.next();
         parser.next();
@@ -38,18 +47,27 @@ impl<'a> Parser<'a> {
         parser
     }
 
-    fn next(&mut self) -> S<Token<'a>> {
+    fn next(&mut self) -> N<Token<'a>> {
         use crate::diag::lex::*;
 
         self.previous = self.current;
         self.current = self.next;
         self.next = loop {
             match self.lexer.next_token() {
-                Ok(ok) => break ok,
+                Ok(ok) => {
+                    break N {
+                        value: ok.val,
+                        node: Node {
+                            span: ok.span,
+                            src: self.src.idx,
+                            parent: None,
+                        },
+                    };
+                }
                 Err(err) => self.ctx.report(LexerError {
                     msg: err.val,
                     node: Node {
-                        range: err.span,
+                        span: err.span,
                         src: self.src.idx,
                         parent: None,
                     },
@@ -61,7 +79,7 @@ impl<'a> Parser<'a> {
 
     pub fn node(&mut self, start: Span, end: Span) -> Node {
         Node {
-            range: Span {
+            span: Span {
                 start: start.start,
                 end: end.end,
             },
@@ -73,7 +91,7 @@ impl<'a> Parser<'a> {
     pub fn parse(&mut self) -> ast::Program<'a> {
         let mut program = ast::Program(vec![]);
 
-        while self.current.val != Token::Eof {
+        while self.current.value != Token::Eof {
             program.0.push(self.parse_item());
         }
 
@@ -81,34 +99,53 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_item(&mut self) -> ast::Item<'a> {
-        let start = self.current.span;
+        let start = self.current.node;
 
         let vis = self.parse_vis();
-        let kind = match self.next().val {
+        let kind = match self.next().value {
             Token::Union => todo!(),
             Token::Struct => todo!(),
             Token::Enum => todo!(),
             Token::Static => todo!(),
             Token::Const => todo!(),
+            Token::Mod => ast::ItemKind::Module(self.parse_mod()),
             Token::Fn => ast::ItemKind::Fn(self.parse_fn()),
             _ => todo!(),
         };
         ast::Item {
-            node: self.node(start, self.previous.span),
+            node: self.ctx.join(start, self.previous.node),
             kind,
             vis,
         }
     }
 
+    fn parse_mod(&mut self) -> ast::Module<'a> {
+        let name = self.parse_symbol();
+        self.expect_semi();
+        ast::Module { name }
+    }
+
+    fn expect_semi(&mut self) {
+        if self.current.value == Token::Semicolon {
+            self.next();
+            return;
+        }
+        self.ctx.report(ExpectedSemi {
+            node: self.previous.node.after().after(),
+            found: self.current.value,
+            found_node: self.current.node
+        });
+    }
+
     fn parse_fn_params(&mut self) -> Vec<ast::FnParam<'a>> {
-        if !matches!(self.current.val, Token::LPar) {
+        if !matches!(self.current.value, Token::LPar) {
             return vec![];
         }
         self.next();
 
         let mut params = vec![];
 
-        // while self.next().val != Token::RPar {
+        // while self.next().value != Token::RPar {
         //     // TODO report error
         // }
         self.next();
@@ -121,14 +158,14 @@ impl<'a> Parser<'a> {
 
         let params = self.parse_fn_params();
 
-        let ret = if matches!(self.current.val, Token::SmallRightArrow) {
+        let ret = if matches!(self.current.value, Token::SmallRightArrow) {
             self.next();
             Some(self.parse_type())
         } else {
             None
         };
 
-        let body = if matches!(self.current.val, Token::Semicolon) {
+        let body = if matches!(self.current.value, Token::Semicolon) {
             None
         } else {
             Some(self.parse_expr())
@@ -147,7 +184,7 @@ impl<'a> Parser<'a> {
 
         let mut stmts = vec![];
 
-        while self.current.val != Token::RBrace {
+        while self.current.value != Token::RBrace {
             stmts.push(self.parse_stmt())
         }
 
@@ -161,12 +198,12 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_expr_binop(&mut self, min_prec: u32) -> ast::Expr<'a> {
-        let start = self.current.span;
+        let start = self.current.node;
 
         let mut lhs = self.parse_expr_2();
 
         loop {
-            let op = match self.current.val {
+            let op = match self.current.value {
                 Token::Plus if BinOp::Add.precedence() >= min_prec => BinOp::Add,
                 Token::Minus if BinOp::Sub.precedence() >= min_prec => BinOp::Sub,
                 Token::Star if BinOp::Mul.precedence() >= min_prec => BinOp::Mul,
@@ -177,17 +214,13 @@ impl<'a> Parser<'a> {
                 Token::Ampersand if BinOp::And.precedence() >= min_prec => BinOp::And,
                 Token::LogicalAnd if BinOp::And.precedence() >= min_prec => BinOp::And,
                 Token::BitwiseXor if BinOp::Xor.precedence() >= min_prec => BinOp::Xor,
-                // Token::ShiftLeft if BinOp::Shl.precedence() >= min_prec => BinOp::Shl,
-                // Token::ShiftRight if BinOp::Shr.precedence() >= min_prec => BinOp::Shr,
-                Token::RAngle
-                    if self.next.val == Token::RAngle && BinOp::Gt.precedence() >= min_prec =>
-                {
+                Token::ShiftLeft if BinOp::Shl.precedence() >= min_prec => BinOp::Shl,
+                Token::ShiftRight if BinOp::Shr.precedence() >= min_prec => BinOp::Shr,
+                Token::GreaterThan if BinOp::Gt.precedence() >= min_prec => {
                     self.next();
                     BinOp::Gt
                 }
-                Token::LAngle
-                    if self.next.val == Token::LAngle && BinOp::Lt.precedence() >= min_prec =>
-                {
+                Token::LessThan if BinOp::Lt.precedence() >= min_prec => {
                     self.next();
                     BinOp::Lt
                 }
@@ -228,7 +261,7 @@ impl<'a> Parser<'a> {
 
             let rhs = self.parse_expr_binop(op.precedence() + op.right_to_left() as u32);
             lhs = ast::Expr {
-                node: self.node(start, self.previous.span),
+                node: self.ctx.join(start, self.previous.node),
                 kind: ast::ExprKind::BinOp {
                     lhs: Box::new(lhs),
                     op,
@@ -255,8 +288,8 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_expr_bottom(&mut self) -> ast::Expr<'a> {
-        let start = self.current.span;
-        let kind = match self.current.val {
+        let start = self.current.node;
+        let kind = match self.current.value {
             Token::LBrace => ast::ExprKind::Block(self.parse_block()),
             Token::Label(_) => {
                 // self.parse_expr_labled();
@@ -295,15 +328,15 @@ impl<'a> Parser<'a> {
         };
 
         ast::Expr {
-            node: self.node(start, self.previous.span),
+            node: self.ctx.join(start, self.previous.node),
             kind,
         }
     }
 
     fn parse_stmt(&mut self) -> ast::Stmt<'a> {
-        let start = self.current.span;
+        let start = self.current.node;
 
-        let kind = match self.current.val {
+        let kind = match self.current.value {
             Token::Let => ast::StmtKind::Let(self.parse_let()),
             Token::Union
             | Token::Struct
@@ -313,7 +346,7 @@ impl<'a> Parser<'a> {
             | Token::Fn => ast::StmtKind::Item(self.parse_item()),
             _ => {
                 let expr = self.parse_expr();
-                if self.current.val == Token::Semicolon {
+                if self.current.value == Token::Semicolon {
                     self.next();
                 }
                 ast::StmtKind::Expr(expr)
@@ -321,7 +354,7 @@ impl<'a> Parser<'a> {
         };
 
         ast::Stmt {
-            node: self.node(start, self.previous.span),
+            node: self.ctx.join(start, self.previous.node),
             kind,
         }
     }
@@ -337,23 +370,26 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_symbol(&mut self) -> ast::Symbol<'a> {
-        let span = self.current.span;
-        if let Token::Ident(name) = self.current.val {
+        if let Token::Ident(name) = self.current.value {
             self.next();
             ast::Symbol {
                 name,
-                node: self.node(span, span),
+                node: self.current.node,
             }
         } else {
+            self.ctx.report(ExpectedSymbol {
+                node: self.current.node,
+                found: self.current.value,
+            });
             ast::Symbol {
                 name: "<<ERROR>>",
-                node: self.node(span, span),
+                node: self.current.node,
             }
         }
     }
 
     fn parse_vis(&mut self) -> ast::Vis {
-        if self.current.val == Token::Ident("pub") {
+        if self.current.value == Token::Ident("pub") {
             self.next();
             ast::Vis::Pub
         } else {

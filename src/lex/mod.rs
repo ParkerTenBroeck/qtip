@@ -59,6 +59,7 @@ fn ident(ident: &str) -> Token<'_> {
         "const" => Token::Const,
         "break" => Token::Break,
         "continue" => Token::Continue,
+        "mod" => Token::Mod,
         o => Token::Ident(o),
     }
 }
@@ -163,11 +164,13 @@ impl<'a> Lexer<'a> {
                 },
                 Some('>') => match consume_if!('=') {
                     Some('=') => Ok(Token::GreaterThanEq),
-                    _ => Ok(Token::RAngle),
+                    Some('>') => Ok(Token::ShiftRight),
+                    _ => Ok(Token::GreaterThan),
                 },
                 Some('<') => match consume_if!('=') {
                     Some('=') => Ok(Token::LessThanEq),
-                    _ => Ok(Token::LAngle),
+                    Some('<') => Ok(Token::ShiftLeft),
+                    _ => Ok(Token::LessThan),
                 },
                 Some('!') => match consume_if!('=') {
                     Some('=') => Ok(Token::NotEquals),

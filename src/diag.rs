@@ -1,6 +1,6 @@
 pub mod lex;
-pub mod parse;
 pub mod other;
+pub mod parse;
 
 use annotate_snippets::*;
 
@@ -25,7 +25,7 @@ impl<'a> Diagnostics<'a> {
 
 impl<'a> std::fmt::Display for Diagnostics<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let renderer = annotate_snippets::Renderer::styled();
+        let renderer = annotate_snippets::Renderer::styled().decor_style(renderer::DecorStyle::Unicode);
         for diag in &self.diags {
             f.write_str(&renderer.render(diag))?;
             writeln!(f)?;
@@ -40,12 +40,7 @@ pub trait Diagnostic {
 }
 
 pub trait Subdiagnostic {
-    fn add_to_diag<'a>(
-        self,
-        ctx: &Context<'a>,
-        group: &mut Group<'a>,
-        groups: &mut Diag<'a>,
-    );
+    fn add_to_diag<'a>(self, ctx: &Context<'a>, group: &mut Group<'a>, groups: &mut Diag<'a>);
 }
 
 pub fn append_to_group<'a>(group: &mut Group<'a>, element: impl Into<Element<'a>>) {
@@ -102,4 +97,3 @@ pub fn patch_snippets<'a>(
         })
         .collect()
 }
-

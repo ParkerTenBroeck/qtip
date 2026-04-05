@@ -6,7 +6,7 @@ pub struct Program<'a>(pub Vec<Item<'a>>);
 
 #[derive(Debug)]
 pub enum ItemKind<'a> {
-    Module(),
+    Module(Module<'a>),
     Use(),
     Fn(Fn<'a>),
     Extern(),
@@ -34,6 +34,11 @@ pub enum Vis {
 pub struct Symbol<'a> {
     pub name: &'a str,
     pub node: Node,
+}
+
+#[derive(Debug)]
+pub struct Module<'a> {
+    pub name: Symbol<'a>,
 }
 
 #[derive(Debug)]

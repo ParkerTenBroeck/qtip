@@ -2,7 +2,9 @@ use std::{cell::RefCell, rc::Rc};
 
 use crate::{
     diag::{Diagnostic, Diagnostics},
+    node::Node,
     source::SourceMap,
+    span::Span,
 };
 
 #[derive(Clone)]
@@ -21,5 +23,13 @@ impl<'a> Context<'a> {
 
     pub fn report(&self, diag: impl Diagnostic) {
         self.diag.borrow_mut().report(self, diag);
+    }
+
+    pub fn join(&self, start: Node, end: Node) -> Node {
+        Node {
+            span: Span::combine(start.span, end.span),
+            src: start.src,
+            parent: start.parent,
+        }
     }
 }

@@ -1,4 +1,3 @@
-
 use proc_macros::Diagnostic;
 
 use crate::{lex::LexError, node::Node};
