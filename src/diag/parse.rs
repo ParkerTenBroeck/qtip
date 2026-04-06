@@ -3,7 +3,7 @@ use proc_macros::Diagnostic;
 use crate::{lex::Token, node::Node};
 
 #[derive(Diagnostic)]
-#[diag("Expected symbol found {found}")]
+#[diag("expected symbol found {found}")]
 pub struct ExpectedSymbol<'a> {
     #[primary_node]
     pub node: Node,
@@ -11,7 +11,15 @@ pub struct ExpectedSymbol<'a> {
 }
 
 #[derive(Diagnostic)]
-#[diag("Expected `;`, found {found}")]
+#[diag("expected type found {found}")]
+pub struct ExpectedType<'a> {
+    #[primary_node]
+    pub node: Node,
+    pub found: Token<'a>,
+}
+
+#[derive(Diagnostic)]
+#[diag("expected `;`, found {found}")]
 pub struct ExpectedSemi<'a> {
     #[primary_node]
     #[label("help: add `;` here")]
@@ -20,4 +28,76 @@ pub struct ExpectedSemi<'a> {
     pub found: Token<'a>,
     #[label("unexpected token")]
     pub found_node: Node,
+}
+
+#[derive(Diagnostic)]
+#[diag("expected item, found {found}")]
+#[help(
+    "items can start with `pub`, `mod`, `union`, `struct`, `enum`, `static`, `const`, `mod`, `fn`"
+)]
+pub struct ExpectedItem<'a> {
+    #[primary_node]
+    pub node: Node,
+    pub found: Token<'a>,
+
+    #[suggestion("remove this semicolon", code = "")]
+    pub remove_semi: Option<Node>,
+}
+
+#[derive(Diagnostic)]
+#[diag("expected expression, found {found}")]
+pub struct ExpectedExpression<'a> {
+    #[primary_node]
+    pub node: Node,
+    pub found: Token<'a>,
+}
+
+#[derive(Diagnostic)]
+#[diag("expected 'if', `for`, `loop`, `while`, `{{`, found {found}")]
+pub struct ExpectedLabeledExpression<'a> {
+    #[primary_node]
+    pub node: Node,
+    pub found: Token<'a>,
+}
+
+#[derive(Diagnostic)]
+#[diag("unexpected closing delimiter: {delim}")]
+pub struct UnexpectedClosingDelim<'a> {
+    #[primary_node]
+    pub node: Node,
+    pub delim: Token<'a>,
+}
+
+#[derive(Diagnostic)]
+#[diag("mismatched delimiters")]
+pub struct MismatchedDelims {
+    #[primary_node]
+    pub lhs: Node,
+    #[primary_node]
+    pub rhs: Node,
+}
+
+#[derive(Diagnostic)]
+#[diag("unclosed delimiter{$if unclosed.len() > 1{\"s\"}else{\"\"} }")]
+pub struct UnclosedDelimiters {
+    #[primary_node]
+    pub node: Node,
+    #[label("unclosed delimiter")]
+    pub unclosed: Vec<Node>,
+}
+
+#[derive(Diagnostic)]
+#[diag("unexpected token found {found} expected {expected:#}")]
+pub struct UnexpectedToken<'a> {
+    #[primary_node]
+    pub node: Node,
+    pub found: Token<'a>,
+    pub expected: Token<'a>,
+}
+
+#[derive(Diagnostic)]
+#[diag("Comments not tracked", level = "warning")]
+pub struct CommentWarning {
+    #[primary_node]
+    pub node: Node,
 }

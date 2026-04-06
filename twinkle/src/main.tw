@@ -1,7 +1,14 @@
-mod meow
+mod meow;
 
-
-
-fn main() -> i32 {
-    1+2
+fn main(foo : i32) -> i32 {
+    
+    //@foo if false false {
+    //} else if  {}
+    //1+2
 }
+
+fn beep(sym :) {
+    fn meow();
+}
+
+fn meow();

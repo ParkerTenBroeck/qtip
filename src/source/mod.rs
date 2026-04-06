@@ -5,7 +5,7 @@ use std::{
     pin::Pin,
 };
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct SrcIdx(u32);
 
 pub struct SourceMap {

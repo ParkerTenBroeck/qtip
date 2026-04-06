@@ -247,10 +247,6 @@ impl<'a> Lexer<'a> {
                 Some(c) if ident_start(c) => loop {
                     match self.peek_char() {
                         Some(c) if ident_continue(c) => _ = self.next_char(),
-                        Some(':') => {
-                            self.next_char();
-                            break Ok(Token::Label(&self.str[start..self.current - 1]));
-                        }
                         _ => break Ok(ident(&self.str[start..self.current])),
                     }
                 },

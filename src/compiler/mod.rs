@@ -62,7 +62,8 @@ impl<'a> Compiler<'a> {
 
             for item in &program.0 {
                 if let ast::ItemKind::Module(module) = &item.kind {
-                    let path = path.join(module.name.name);
+                    let mut path = path.to_path_buf();
+                    path.set_file_name(module.name.name);
 
                     if finished.contains(&path) {
                         continue;

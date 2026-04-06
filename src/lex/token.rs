@@ -78,7 +78,6 @@ pub enum Token<'a> {
     Enum,
     Union,
 
-    Label(&'a str),
     Ident(&'a str),
 
     StringLiteral(StringLiteral<'a>),
@@ -122,7 +121,7 @@ impl fmt::Display for Token<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if f.alternate() {
             match self {
-                Self::Ident(_) | Self::Label(_) => return f.write_str("ident"),
+                Self::Ident(_) => return f.write_str("ident"),
                 Self::StringLiteral(_)
                 | Self::CharLiteral(_)
                 | Self::NumericLiteral(_)
@@ -204,17 +203,92 @@ impl fmt::Display for Token<'_> {
             Self::Struct => display_token_text(f, "struct"),
             Self::Enum => display_token_text(f, "enum"),
             Self::Union => display_token_text(f, "union"),
-            Self::Label(label) => display_token_text(f, &format!("{label}:")),
             Self::Ident(ident) => display_token_text(f, ident),
-            Self::StringLiteral(lit) => display_token_text(f, &format!("\"{}\"", lit.repr.escape_debug())),
-            Self::CharLiteral(lit) => display_token_text(f, &format!("'{}'", lit.repr.escape_debug())),
+            Self::StringLiteral(lit) => {
+                display_token_text(f, &format!("\"{}\"", lit.repr.escape_debug()))
+            }
+            Self::CharLiteral(lit) => {
+                display_token_text(f, &format!("'{}'", lit.repr.escape_debug()))
+            }
             Self::NumericLiteral(number) => display_token_text(f, number.full()),
             Self::FalseLiteral => display_token_text(f, "false"),
             Self::TrueLiteral => display_token_text(f, "true"),
-            Self::SingleLineComment(comment) => display_token_text(f, &format!("//{}", comment.escape_debug())),
-            Self::MultiLineComment(comment) => display_token_text(f, &format!("/*{}*/", comment.escape_debug())),
+            Self::SingleLineComment(comment) => {
+                display_token_text(f, &format!("//{}", comment.escape_debug()))
+            }
+            Self::MultiLineComment(comment) => {
+                display_token_text(f, &format!("/*{}*/", comment.escape_debug()))
+            }
             Self::Eof => f.write_str("end of file"),
         }
+    }
+}
+
+impl<'a> Token<'a> {
+    pub fn starts_item(&self) -> bool {
+        matches!(
+            self,
+            Token::Union
+                | Token::Struct
+                | Token::Enum
+                | Token::Static
+                | Token::Const
+                | Token::Mod
+                | Token::Fn
+                | Token::Ident("pub")
+        )
+    }
+
+    pub fn starts_stmt(&self) -> bool {
+        matches!(
+            self,
+            Token::Union
+                | Token::Struct
+                | Token::Enum
+                | Token::Static
+                | Token::Const
+                | Token::Mod
+                | Token::Fn
+                | Token::Ident("pub")
+                | Token::Let
+                | Token::LPar
+                | Token::LBrace
+                | Token::If
+                | Token::While
+                | Token::For
+                | Token::Loop
+                | Token::At
+                | Token::Ident(_)
+                | Token::Return
+                | Token::Break
+        ) || self.is_literal()
+    }
+
+    pub fn delim(&self) -> bool {
+        self.delim_close() || self.delim_open()
+    }
+
+    pub fn delim_open(&self) -> bool{
+        matches!(self, Token::LPar|Token::LBrace|Token::LBracket)
+    }
+
+    pub fn delim_close(&self) -> bool{
+        matches!(self, Token::RPar|Token::RBrace|Token::RBracket)
+    }
+
+    pub fn is_literal(&self) -> bool {
+        matches!(
+            self,
+            Token::CharLiteral(_)
+            | Token::StringLiteral(_)
+            | Token::TrueLiteral
+            | Token::FalseLiteral
+            | Token::NumericLiteral(_)
+        )
+    }
+
+    pub fn eof(&mut self) -> bool {
+        matches!(self, Token::Eof)
     }
 }
 

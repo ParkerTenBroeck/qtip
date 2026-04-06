@@ -46,13 +46,12 @@ pub struct Fn<'a> {
     pub name: Symbol<'a>,
     pub params: Vec<FnParam<'a>>,
     pub ret: Option<Type<'a>>,
-    pub body: Option<Expr<'a>>,
+    pub body: Option<Block<'a>>,
 }
 
 #[derive(Debug)]
 pub struct FnParam<'a> {
     pub node: Node,
-    pub vis: Vis,
     pub name: Symbol<'a>,
     pub ty: Type<'a>,
 }
@@ -79,6 +78,7 @@ pub struct Stmt<'a> {
 pub enum StmtKind<'a> {
     Item(Item<'a>),
     Expr(Expr<'a>),
+    ExprSemi(Expr<'a>),
     Let(Let<'a>),
 }
 
@@ -213,14 +213,22 @@ pub struct Expr<'a> {
 }
 
 #[derive(Debug)]
+pub struct Label<'a> {
+    pub sym: Symbol<'a>,
+}
+
+#[derive(Debug)]
 pub enum ExprKind<'a> {
-    Block(Block<'a>),
-    If {
-        if_chain: Vec<CondBlock<'a>>,
-        else_end: Option<Box<Expr<'a>>>,
-    },
-    While(Box<CondBlock<'a>>),
-    Loop(Box<Expr<'a>>),
+    Block(Block<'a>, Option<Label<'a>>),
+    If(
+        Box<Expr<'a>>,
+        Block<'a>,
+        Option<Box<Expr<'a>>>,
+        Option<Label<'a>>,
+    ),
+    While(Box<Expr<'a>>, Block<'a>, Option<Label<'a>>),
+    Loop(Block<'a>, Option<Label<'a>>),
+    For(Block<'a>, Option<Label<'a>>),
     FuncCall {
         ptr: Box<Expr<'a>>,
         args: Vec<Expr<'a>>,
