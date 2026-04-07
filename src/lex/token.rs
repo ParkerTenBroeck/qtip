@@ -268,22 +268,22 @@ impl<'a> Token<'a> {
         self.delim_close() || self.delim_open()
     }
 
-    pub fn delim_open(&self) -> bool{
-        matches!(self, Token::LPar|Token::LBrace|Token::LBracket)
+    pub fn delim_open(&self) -> bool {
+        matches!(self, Token::LPar | Token::LBrace | Token::LBracket)
     }
 
-    pub fn delim_close(&self) -> bool{
-        matches!(self, Token::RPar|Token::RBrace|Token::RBracket)
+    pub fn delim_close(&self) -> bool {
+        matches!(self, Token::RPar | Token::RBrace | Token::RBracket)
     }
 
     pub fn is_literal(&self) -> bool {
         matches!(
             self,
             Token::CharLiteral(_)
-            | Token::StringLiteral(_)
-            | Token::TrueLiteral
-            | Token::FalseLiteral
-            | Token::NumericLiteral(_)
+                | Token::StringLiteral(_)
+                | Token::TrueLiteral
+                | Token::FalseLiteral
+                | Token::NumericLiteral(_)
         )
     }
 

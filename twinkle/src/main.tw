@@ -1,14 +1,11 @@
 mod meow;
 
-fn main(foo : i32) -> i32 {
-    
-    //@foo if false false {
-    //} else if  {}
-    //1+2
-}
+fn main (foo: i32) -> i32 {
+    //path::meow::Nya![Baz]::AssociatedType
 
-fn beep(sym :) {
-    fn meow();
-}
+    let meow = @foo if false {
+        12
+    } else if 1+2{
 
-fn meow();
+    }
+}

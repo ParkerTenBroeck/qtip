@@ -1,4 +1,4 @@
-use proc_macros::Diagnostic;
+use proc_macros::{Diagnostic, Subdiagnostic};
 
 use crate::{lex::Token, node::Node};
 
@@ -93,6 +93,39 @@ pub struct UnexpectedToken<'a> {
     pub node: Node,
     pub found: Token<'a>,
     pub expected: Token<'a>,
+}
+
+#[derive(Diagnostic)]
+#[diag("missing {missing}")]
+pub struct MissingDelimiters {
+    #[primary_node]
+    #[suggestion("{suggestion}", code = "{delims}")]
+    pub node: Node,
+    pub suggestion: &'static str,
+    pub delims: &'static str,
+    pub missing: &'static str,
+}
+
+#[derive(Diagnostic)]
+#[diag("incorrect delimiters used")]
+pub struct IncorrectDelimiters {
+    #[primary_node]
+    pub lhs: Node,
+    #[primary_node]
+    pub rhs: Node,
+    #[subdiagnostic]
+    pub fix: DelimiterFix
+}
+
+#[derive(Subdiagnostic)]
+#[multipart_suggestion("")]
+pub struct DelimiterFix {
+    #[suggestion_part(code = "{lhs_delim}")]
+    pub lhs: Node,
+    pub lhs_delim: &'static str,
+    #[suggestion_part(code = "{rhs_delim}")]
+    pub rhs: Node,
+    pub rhs_delim: &'static str,
 }
 
 #[derive(Diagnostic)]

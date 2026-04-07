@@ -1,7 +1,13 @@
 pub mod ast;
 
 use crate::{
-    context::Context, diag::parse::*, lex::{Lexer, Token}, node::Node, parser::ast::Symbol, source::Source, span::Span
+    context::Context,
+    diag::parse::*,
+    lex::{Lexer, Token},
+    node::Node,
+    parser::ast::Symbol,
+    source::Source,
+    span::Span,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -17,7 +23,6 @@ pub struct Parser<'a> {
     lexer: Lexer<'a>,
     previous: N<Token<'a>>,
     next: N<Token<'a>>,
-    // next: N<Token<'a>>,
 
     delimiter_stack: Vec<(Delimiter, Node)>,
 }
@@ -157,6 +162,7 @@ impl<'a> Parser<'a> {
                 }
             }
         }
+        self.next();
 
         list
     }
@@ -207,8 +213,13 @@ impl<'a> Parser<'a> {
             found_node: self.next.node,
         });
     }
+    
 
-    fn parse_delim<R>(&mut self, delim: Delimiter, func: impl FnOnce(&mut Self) -> R) -> PResult<R> {
+    fn parse_delim<R>(
+        &mut self,
+        delim: Delimiter,
+        func: impl FnOnce(&mut Self) -> R,
+    ) -> PResult<R> {
         let (open, close) = match delim {
             Delimiter::Paren => (Token::LPar, Token::RPar),
             Delimiter::Brace => (Token::LBrace, Token::RBrace),
@@ -216,31 +227,37 @@ impl<'a> Parser<'a> {
         };
 
         let level = self.delimiter_stack.len();
+
+        let open_got = self.next;
         
-        if self.next.value.delim_open(){
+        if self.next.value.delim_open() {
             self.next();
         } else {
-            self.ctx.report(UnexpectedToken{
+            self.ctx.report(UnexpectedToken {
                 node: self.next.node,
                 found: self.next.value,
                 expected: open,
             });
-            return Err(())
+            return Err(());
         }
-        
+
         let ret = func(self);
-        
-        if !self.next.value.delim_close(){
-            self.ctx.report(UnexpectedToken{
+
+        if !self.next.value.delim_close() && !self.next.value.eof() {
+            self.ctx.report(UnexpectedToken {
                 node: self.next.node,
                 found: self.next.value,
                 expected: close,
             });
         }
         while !self.next.value.eof() && self.delimiter_stack.len() > level {
-            dbg!(self.next());
+            self.next();
         }
         
+        if self.previous.value.delim_close() && self.delimiter_stack.len() == level{
+
+        }
+
         Ok(ret)
     }
 
@@ -251,7 +268,7 @@ impl<'a> Parser<'a> {
                 found: self.next.value,
                 expected,
             });
-            if !self.next.value.delim(){
+            if !self.next.value.delim() {
                 self.next();
             }
             Err(())
@@ -270,41 +287,70 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_fn_params(&mut self) -> PResult<Vec<ast::FnParam<'a>>> {
+    fn parse_fn_param(&mut self) -> PResult<ast::FnParam<'a>> {
+        let start = self.next.node;
+        let name = self.parse_symbol()?;
+        self.expect_token(Token::Colon)?;
+        let ty = self.parse_type()?;
+        let node = self.ctx.join(start, self.previous.node);
+
+        Ok(ast::FnParam { node, name, ty })
+    }
+
+    fn parse_fn_params(&mut self) -> PResult<PResult<Vec<ast::FnParam<'a>>>> {
         let mut params = vec![];
 
-        self.parse_delim(Delimiter::Paren, |parser| {
+        if !self.next.value.delim_open() {
+            self.ctx.report(MissingDelimiters {
+                node: self.previous.node.after(),
+                suggestion: "missing parameters for function definition",
+                missing: "add a parameter list",
+                delims: "()",
+            });
+            return Err(())
+        }
+
+
+        self.parse_delim(Delimiter::Paren, move |parser| {
             while !matches!(parser.next.value, Token::RPar | Token::Eof) {
-                let start = parser.next.node;
-                let name = parser.parse_symbol()?;
-                parser.expect_token(Token::Colon)?;
-                let ty = parser.parse_type()?;
-                let node = parser.ctx.join(start, parser.previous.node);
-
-                params.push(ast::FnParam { node, name, ty });
-
+                match parser.parse_fn_param() {
+                    Ok(ok) => params.push(ok),
+                    Err(_) => {
+                        while !matches!(parser.next.value, Token::RPar | Token::Eof | Token::Comma)
+                        {
+                            parser.next();
+                        }
+                    }
+                }
                 if !parser.consume_if(Token::Comma) {
                     break;
                 }
             }
-            Ok(())
-        })??;
-
-        Ok(params)
+            Ok(params)
+        })
     }
 
     fn parse_fn(&mut self) -> PResult<ast::Fn<'a>> {
         let name = self.parse_symbol()?;
-        let params = self.parse_fn_params()?;
+        let params = self.parse_fn_params()?.unwrap_or_default();
         let ret = if self.consume_if(Token::SmallRightArrow) {
-            Some(self.parse_type()?)
+            self.parse_type().ok()
         } else {
             None
         };
         let body = if self.consume_if(Token::Semicolon) {
             None
         } else {
-            Some(self.parse_block()?)
+            if !self.next.value.delim_open() {
+                self.ctx.report(MissingDelimiters {
+                    node: self.previous.node.after(),
+                    suggestion: "function body",
+                    missing: "function body",
+                    delims: "{}",
+                });
+                return Err(())
+            }
+            self.parse_block()?.ok()
         };
 
         Ok(ast::Fn {
@@ -315,17 +361,27 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn parse_block(&mut self) -> PResult<ast::Block<'a>> {
+    fn parse_block(&mut self) -> PResult<PResult<ast::Block<'a>>> {
         let mut stmts = vec![];
+
+        if !self.next.value.delim_open() {
+            self.ctx.report(MissingDelimiters {
+                node: self.previous.node.after(),
+                suggestion: "add block",
+                missing: "block",
+                delims: "{}",
+            });
+            return Err(())
+        }
 
         self.parse_delim(Delimiter::Brace, |parser| {
             while !matches!(parser.next.value, Token::RBrace | Token::Eof) {
-                stmts.push(parser.parse_stmt()?)
+                if let Ok(stmt) = parser.parse_stmt() {
+                    stmts.push(stmt)
+                }
             }
-            Ok(())
-        })??;
-
-        Ok(ast::Block { stmts })
+            Ok(ast::Block { stmts })
+        })
     }
 
     fn parse_expr(&mut self) -> PResult<ast::Expr<'a>> {
@@ -430,9 +486,9 @@ impl<'a> Parser<'a> {
             } else {
                 None
             };
-            ast::ExprKind::If(Box::new(cond), block, chain, label)
+            ast::ExprKind::If(Box::new(cond), block?, chain, label)
         } else {
-            ast::ExprKind::Block(self.parse_block()?, None)
+            ast::ExprKind::Block(self.parse_block()??, None)
         };
 
         Ok(ast::Expr {
@@ -446,11 +502,11 @@ impl<'a> Parser<'a> {
         let kind = match self.next.value {
             Token::If => return self.parse_if_chain(label),
             Token::While => {
-                ast::ExprKind::While(Box::new(self.parse_expr()?), self.parse_block()?, label)
+                ast::ExprKind::While(Box::new(self.parse_expr()?), self.parse_block()??, label)
             }
-            Token::LBrace => ast::ExprKind::Block(self.parse_block()?, label),
-            Token::Loop => ast::ExprKind::Loop(self.parse_block()?, label),
-            Token::For => ast::ExprKind::For(self.parse_block()?, label),
+            Token::LBrace => ast::ExprKind::Block(self.parse_block()??, label),
+            Token::Loop => ast::ExprKind::Loop(self.parse_block()??, label),
+            Token::For => ast::ExprKind::For(self.parse_block()??, label),
             _ => {
                 self.ctx.report(ExpectedLabeledExpression {
                     node: self.next.node,
@@ -524,7 +580,10 @@ impl<'a> Parser<'a> {
         let level = self.delimiter_stack.len();
 
         let kind = match self.next.value {
-            Token::Let => self.parse_let().map(ast::StmtKind::Let),
+            Token::Let => {
+                self.next();
+                self.parse_let().map(ast::StmtKind::Let)
+            },
             Token::Union
             | Token::Struct
             | Token::Enum
@@ -545,11 +604,12 @@ impl<'a> Parser<'a> {
             Err(err) => {
                 // tries to recover by ignoring the remainder of the invalid item
                 while !self.next.value.eof()
-                    && (!self.next.value.starts_item() || level > self.delimiter_stack.len())
+                    && ((!self.next.value.starts_item() && !self.next.value.delim_close())
+                        || level > self.delimiter_stack.len())
                 {
                     self.next();
                 }
-                return Err(err)
+                return Err(err);
             }
         };
 
@@ -561,8 +621,11 @@ impl<'a> Parser<'a> {
 
     fn parse_let(&mut self) -> PResult<ast::Let<'a>> {
         let name = self.parse_symbol()?;
-        self.expect_token(Token::Colon)?;
-        let ty = self.parse_type()?;
+        let ty = if self.consume_if(Token::Colon) {
+            Some(self.parse_type()?)
+        }else{
+            None
+        };
         let initializer = if self.consume_if(Token::Equals) {
             Some(self.parse_expr()?)
         } else {
@@ -577,14 +640,14 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_type(&mut self) -> PResult<ast::Type<'a>> {
-        match self.next.value{
+        match self.next.value {
             Token::Ident(name) => {
                 self.next();
-                Ok(ast::Type{
-                    name: Symbol{
+                Ok(ast::Type {
+                    name: Symbol {
                         name,
-                        node: self.previous.node
-                    }
+                        node: self.previous.node,
+                    },
                 })
             }
             _ => {
@@ -592,7 +655,7 @@ impl<'a> Parser<'a> {
                     node: self.next.node,
                     found: self.next.value,
                 });
-                if !self.next.value.delim(){
+                if !self.next.value.delim() {
                     self.next();
                 }
                 Err(())
@@ -612,7 +675,7 @@ impl<'a> Parser<'a> {
                 node: self.next.node,
                 found: self.next.value,
             });
-            if !self.next.value.delim(){
+            if !self.next.value.delim() {
                 self.next();
             }
             Err(())

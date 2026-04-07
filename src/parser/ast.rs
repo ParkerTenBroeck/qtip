@@ -64,7 +64,7 @@ pub struct Type<'a> {
 #[derive(Debug)]
 pub struct Let<'a> {
     pub name: Symbol<'a>,
-    pub ty: Type<'a>,
+    pub ty: Option<Type<'a>>,
     pub initializer: Option<Expr<'a>>,
 }
 

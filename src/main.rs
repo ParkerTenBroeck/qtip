@@ -8,5 +8,6 @@ fn main() {
         std::fs::read_to_string(start.join(path))
     });
     let result = Compiler::compile(&sm);
+
     println!("{result}");
 }
