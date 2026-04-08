@@ -1,11 +1,13 @@
 pub mod ast;
+pub mod expr;
+pub mod item;
+pub mod ty;
 
 use crate::{
     context::Context,
     diag::parse::*,
     lex::{Lexer, Token},
     node::Node,
-    parser::ast::Symbol,
     source::Source,
     span::Span,
 };
@@ -144,64 +146,6 @@ impl<'a> Parser<'a> {
         ast::Program(self.parse_item_list())
     }
 
-    pub fn parse_item_list(&mut self) -> Vec<ast::Item<'a>> {
-        let mut list = vec![];
-
-        while self.next.value != Token::Eof {
-            let level = self.delimiter_stack.len();
-
-            match self.parse_item() {
-                Ok(item) => list.push(item),
-                Err(_) => {
-                    // tries to recover by ignoring the remainder of the invalid item
-                    while !self.next.value.eof()
-                        && (!self.next.value.starts_item() || level < self.delimiter_stack.len())
-                    {
-                        self.next();
-                    }
-                }
-            }
-        }
-        self.next();
-
-        list
-    }
-
-    fn parse_item(&mut self) -> PResult<ast::Item<'a>> {
-        let start = self.next.node;
-
-        let vis = self.parse_vis();
-        let kind = match self.next().value {
-            Token::Union => todo!(),
-            Token::Struct => todo!(),
-            Token::Enum => todo!(),
-            Token::Static => todo!(),
-            Token::Const => todo!(),
-            Token::Mod => ast::ItemKind::Module(self.parse_mod()?),
-            Token::Fn => ast::ItemKind::Fn(self.parse_fn()?),
-            _ => {
-                self.ctx.report(ExpectedItem {
-                    node: self.previous.node,
-                    found: self.previous.value,
-                    remove_semi: (self.previous.value == Token::Semicolon)
-                        .then_some(self.previous.node),
-                });
-                return Err(());
-            }
-        };
-        Ok(ast::Item {
-            node: self.ctx.join(start, self.previous.node),
-            kind,
-            vis,
-        })
-    }
-
-    fn parse_mod(&mut self) -> PResult<ast::Module<'a>> {
-        let name = self.parse_symbol()?;
-        self.expect_semi();
-        Ok(ast::Module { name })
-    }
-
     fn expect_semi(&mut self) {
         if self.next.value == Token::Semicolon {
             self.next();
@@ -213,7 +157,6 @@ impl<'a> Parser<'a> {
             found_node: self.next.node,
         });
     }
-    
 
     fn parse_delim<R>(
         &mut self,
@@ -229,7 +172,7 @@ impl<'a> Parser<'a> {
         let level = self.delimiter_stack.len();
 
         let open_got = self.next;
-        
+
         if self.next.value.delim_open() {
             self.next();
         } else {
@@ -253,9 +196,9 @@ impl<'a> Parser<'a> {
         while !self.next.value.eof() && self.delimiter_stack.len() > level {
             self.next();
         }
-        
-        if self.previous.value.delim_close() && self.delimiter_stack.len() == level{
 
+        if self.previous.value.delim_close() && self.delimiter_stack.len() == level {
+            
         }
 
         Ok(ret)
@@ -297,70 +240,6 @@ impl<'a> Parser<'a> {
         Ok(ast::FnParam { node, name, ty })
     }
 
-    fn parse_fn_params(&mut self) -> PResult<PResult<Vec<ast::FnParam<'a>>>> {
-        let mut params = vec![];
-
-        if !self.next.value.delim_open() {
-            self.ctx.report(MissingDelimiters {
-                node: self.previous.node.after(),
-                suggestion: "missing parameters for function definition",
-                missing: "add a parameter list",
-                delims: "()",
-            });
-            return Err(())
-        }
-
-
-        self.parse_delim(Delimiter::Paren, move |parser| {
-            while !matches!(parser.next.value, Token::RPar | Token::Eof) {
-                match parser.parse_fn_param() {
-                    Ok(ok) => params.push(ok),
-                    Err(_) => {
-                        while !matches!(parser.next.value, Token::RPar | Token::Eof | Token::Comma)
-                        {
-                            parser.next();
-                        }
-                    }
-                }
-                if !parser.consume_if(Token::Comma) {
-                    break;
-                }
-            }
-            Ok(params)
-        })
-    }
-
-    fn parse_fn(&mut self) -> PResult<ast::Fn<'a>> {
-        let name = self.parse_symbol()?;
-        let params = self.parse_fn_params()?.unwrap_or_default();
-        let ret = if self.consume_if(Token::SmallRightArrow) {
-            self.parse_type().ok()
-        } else {
-            None
-        };
-        let body = if self.consume_if(Token::Semicolon) {
-            None
-        } else {
-            if !self.next.value.delim_open() {
-                self.ctx.report(MissingDelimiters {
-                    node: self.previous.node.after(),
-                    suggestion: "function body",
-                    missing: "function body",
-                    delims: "{}",
-                });
-                return Err(())
-            }
-            self.parse_block()?.ok()
-        };
-
-        Ok(ast::Fn {
-            name,
-            params,
-            ret,
-            body,
-        })
-    }
-
     fn parse_block(&mut self) -> PResult<PResult<ast::Block<'a>>> {
         let mut stmts = vec![];
 
@@ -371,7 +250,7 @@ impl<'a> Parser<'a> {
                 missing: "block",
                 delims: "{}",
             });
-            return Err(())
+            return Err(());
         }
 
         self.parse_delim(Delimiter::Brace, |parser| {
@@ -382,285 +261,6 @@ impl<'a> Parser<'a> {
             }
             Ok(ast::Block { stmts })
         })
-    }
-
-    fn parse_expr(&mut self) -> PResult<ast::Expr<'a>> {
-        self.parse_expr_binop(0)
-    }
-
-    fn parse_expr_binop(&mut self, min_prec: u32) -> PResult<ast::Expr<'a>> {
-        let start = self.next.node;
-
-        let mut lhs = self.parse_expr_2()?;
-
-        use ast::BinOp;
-        loop {
-            let op = match self.next.value {
-                Token::Plus if BinOp::Add.precedence() >= min_prec => BinOp::Add,
-                Token::Minus if BinOp::Sub.precedence() >= min_prec => BinOp::Sub,
-                Token::Star if BinOp::Mul.precedence() >= min_prec => BinOp::Mul,
-                Token::Slash if BinOp::Div.precedence() >= min_prec => BinOp::Div,
-                Token::Percent if BinOp::Rem.precedence() >= min_prec => BinOp::Rem,
-                Token::LogicalOr if BinOp::Or.precedence() >= min_prec => BinOp::Or,
-                Token::BitwiseOr if BinOp::Or.precedence() >= min_prec => BinOp::Or,
-                Token::Ampersand if BinOp::And.precedence() >= min_prec => BinOp::And,
-                Token::LogicalAnd if BinOp::And.precedence() >= min_prec => BinOp::And,
-                Token::BitwiseXor if BinOp::Xor.precedence() >= min_prec => BinOp::Xor,
-                Token::ShiftLeft if BinOp::Shl.precedence() >= min_prec => BinOp::Shl,
-                Token::ShiftRight if BinOp::Shr.precedence() >= min_prec => BinOp::Shr,
-                Token::GreaterThan if BinOp::Gt.precedence() >= min_prec => {
-                    self.next();
-                    BinOp::Gt
-                }
-                Token::LessThan if BinOp::Lt.precedence() >= min_prec => {
-                    self.next();
-                    BinOp::Lt
-                }
-
-                Token::GreaterThanEq if BinOp::Gte.precedence() >= min_prec => BinOp::Gte,
-                Token::LessThanEq if BinOp::Lte.precedence() >= min_prec => BinOp::Lte,
-                Token::Equals if BinOp::Eq.precedence() >= min_prec => BinOp::Eq,
-                Token::NotEquals if BinOp::Ne.precedence() >= min_prec => BinOp::Ne,
-
-                Token::Assign if BinOp::Assign.precedence() >= min_prec => BinOp::Assign,
-                Token::PlusAssign if BinOp::PlusAssign.precedence() >= min_prec => {
-                    BinOp::PlusAssign
-                }
-                Token::MinusAssign if BinOp::MinusAssign.precedence() >= min_prec => {
-                    BinOp::MinusAssign
-                }
-                Token::TimesAssign if BinOp::TimesAssign.precedence() >= min_prec => {
-                    BinOp::TimesAssign
-                }
-                Token::DivideAssign if BinOp::DivideAssign.precedence() >= min_prec => {
-                    BinOp::DivideAssign
-                }
-                Token::ModuloAssign if BinOp::ModuloAssign.precedence() >= min_prec => {
-                    BinOp::ModuloAssign
-                }
-                Token::OrAssign if BinOp::OrAssign.precedence() >= min_prec => BinOp::OrAssign,
-                Token::AndAssign if BinOp::AndAssign.precedence() >= min_prec => BinOp::AndAssign,
-                Token::XorAssign if BinOp::XorAssign.precedence() >= min_prec => BinOp::XorAssign,
-                // Token::ShiftRightAssign if BinOp::PlusAssign.precedence() >= min_prec => {
-                //     BinOp::PlusAssign
-                // }
-                // Token::ShiftLeftAssign if BinOp::PlusAssign.precedence() >= min_prec => {
-                //     BinOp::PlusAssign
-                // }
-                _ => break,
-            };
-            self.next();
-
-            let rhs = self.parse_expr_binop(op.precedence() + op.right_to_left() as u32)?;
-            lhs = ast::Expr {
-                node: self.ctx.join(start, self.previous.node),
-                kind: ast::ExprKind::BinOp {
-                    lhs: Box::new(lhs),
-                    op,
-                    rhs: Box::new(rhs),
-                },
-            }
-        }
-
-        Ok(lhs)
-    }
-
-    fn parse_expr_2(&mut self) -> PResult<ast::Expr<'a>> {
-        //todo parse as
-        self.parse_expr_3()
-    }
-
-    fn parse_expr_3(&mut self) -> PResult<ast::Expr<'a>> {
-        // parse regular unop
-        self.parse_expr_bottom()
-    }
-
-    fn parse_if_chain(&mut self, label: Option<ast::Label<'a>>) -> PResult<ast::Expr<'a>> {
-        let start = self.next.node;
-
-        let kind = if self.consume_if(Token::If) {
-            let cond = self.parse_expr()?;
-            let block = self.parse_block()?;
-            let chain = if self.consume_if(Token::Else) {
-                Some(Box::new(self.parse_if_chain(None)?))
-            } else {
-                None
-            };
-            ast::ExprKind::If(Box::new(cond), block?, chain, label)
-        } else {
-            ast::ExprKind::Block(self.parse_block()??, None)
-        };
-
-        Ok(ast::Expr {
-            node: self.ctx.join(start, self.previous.node),
-            kind,
-        })
-    }
-
-    fn parse_expr_labled(&mut self, label: Option<ast::Label<'a>>) -> PResult<ast::Expr<'a>> {
-        let start = self.next.node;
-        let kind = match self.next.value {
-            Token::If => return self.parse_if_chain(label),
-            Token::While => {
-                ast::ExprKind::While(Box::new(self.parse_expr()?), self.parse_block()??, label)
-            }
-            Token::LBrace => ast::ExprKind::Block(self.parse_block()??, label),
-            Token::Loop => ast::ExprKind::Loop(self.parse_block()??, label),
-            Token::For => ast::ExprKind::For(self.parse_block()??, label),
-            _ => {
-                self.ctx.report(ExpectedLabeledExpression {
-                    node: self.next.node,
-                    found: self.next.value,
-                });
-                self.next();
-                return Err(());
-            }
-        };
-
-        Ok(ast::Expr {
-            node: self.ctx.join(start, self.previous.node),
-            kind,
-        })
-    }
-
-    fn parse_expr_bottom(&mut self) -> PResult<ast::Expr<'a>> {
-        let start = self.next.node;
-        let kind = match self.next.value {
-            Token::LBrace | Token::If | Token::While | Token::Loop | Token::For => {
-                return self.parse_expr_labled(None);
-            }
-            Token::At => {
-                self.next();
-                let sym = self.parse_symbol()?;
-                return self.parse_expr_labled(Some(ast::Label { sym }));
-            }
-            Token::CharLiteral(c) => {
-                self.next();
-                ast::ExprKind::Literal(ast::Literal::Char(c))
-            }
-            Token::StringLiteral(c) => {
-                self.next();
-                ast::ExprKind::Literal(ast::Literal::String(c))
-            }
-            Token::NumericLiteral(c) => {
-                self.next();
-                ast::ExprKind::Literal(ast::Literal::Number(c))
-            }
-            Token::FalseLiteral => {
-                self.next();
-                ast::ExprKind::Literal(ast::Literal::Bool(false))
-            }
-            Token::TrueLiteral => {
-                self.next();
-                ast::ExprKind::Literal(ast::Literal::Bool(true))
-            }
-            Token::Ident(_) => ast::ExprKind::Path(self.parse_symbol()?),
-            Token::LPar => self.parse_delim(Delimiter::Paren, |parser| {
-                Ok(ast::ExprKind::Paren(Box::new(parser.parse_expr()?)))
-            })??,
-            _ => {
-                self.ctx.report(ExpectedExpression {
-                    node: self.next.node,
-                    found: self.next.value,
-                });
-                self.next();
-                ast::ExprKind::Literal(ast::Literal::Bool(false))
-            }
-        };
-
-        Ok(ast::Expr {
-            node: self.ctx.join(start, self.previous.node),
-            kind,
-        })
-    }
-
-    fn parse_stmt(&mut self) -> PResult<ast::Stmt<'a>> {
-        let start = self.next.node;
-
-        let level = self.delimiter_stack.len();
-
-        let kind = match self.next.value {
-            Token::Let => {
-                self.next();
-                self.parse_let().map(ast::StmtKind::Let)
-            },
-            Token::Union
-            | Token::Struct
-            | Token::Enum
-            | Token::Static
-            | Token::Const
-            | Token::Fn
-            | Token::Mod => self.parse_item().map(ast::StmtKind::Item),
-            _ => self.parse_expr().map(|expr| {
-                if self.consume_if(Token::Semicolon) {
-                    ast::StmtKind::ExprSemi(expr)
-                } else {
-                    ast::StmtKind::Expr(expr)
-                }
-            }),
-        };
-        let kind = match kind {
-            Ok(ok) => ok,
-            Err(err) => {
-                // tries to recover by ignoring the remainder of the invalid item
-                while !self.next.value.eof()
-                    && ((!self.next.value.starts_item() && !self.next.value.delim_close())
-                        || level > self.delimiter_stack.len())
-                {
-                    self.next();
-                }
-                return Err(err);
-            }
-        };
-
-        Ok(ast::Stmt {
-            node: self.ctx.join(start, self.previous.node),
-            kind,
-        })
-    }
-
-    fn parse_let(&mut self) -> PResult<ast::Let<'a>> {
-        let name = self.parse_symbol()?;
-        let ty = if self.consume_if(Token::Colon) {
-            Some(self.parse_type()?)
-        }else{
-            None
-        };
-        let initializer = if self.consume_if(Token::Equals) {
-            Some(self.parse_expr()?)
-        } else {
-            None
-        };
-
-        Ok(ast::Let {
-            name,
-            ty,
-            initializer,
-        })
-    }
-
-    fn parse_type(&mut self) -> PResult<ast::Type<'a>> {
-        match self.next.value {
-            Token::Ident(name) => {
-                self.next();
-                Ok(ast::Type {
-                    name: Symbol {
-                        name,
-                        node: self.previous.node,
-                    },
-                })
-            }
-            _ => {
-                self.ctx.report(ExpectedType {
-                    node: self.next.node,
-                    found: self.next.value,
-                });
-                if !self.next.value.delim() {
-                    self.next();
-                }
-                Err(())
-            }
-        }
     }
 
     fn parse_symbol(&mut self) -> PResult<ast::Symbol<'a>> {

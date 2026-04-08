@@ -249,6 +249,9 @@ pub enum ExprKind<'a> {
     Path(Symbol<'a>),
     Literal(Literal<'a>),
     Paren(Box<Expr<'a>>),
+    Break(Box<Expr<'a>>, Option<Label<'a>>),
+    Continue(Box<Expr<'a>>, Option<Label<'a>>),
+    Return(Box<Expr<'a>>),
 }
 
 #[derive(Debug)]

@@ -4,7 +4,10 @@ fn main (foo: i32) -> i32 {
     //path::meow::Nya![Baz]::AssociatedType
 
     let meow = @foo if false {
-        12
+        break @foo 12
+        break @foo 12
+        break @foo 12
+        break @foo 12
     } else if 1+2{
 
     }

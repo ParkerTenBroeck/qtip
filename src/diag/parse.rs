@@ -114,7 +114,7 @@ pub struct IncorrectDelimiters {
     #[primary_node]
     pub rhs: Node,
     #[subdiagnostic]
-    pub fix: DelimiterFix
+    pub fix: DelimiterFix,
 }
 
 #[derive(Subdiagnostic)]
