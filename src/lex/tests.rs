@@ -126,7 +126,7 @@ fn skips_whitespace() {
 #[test]
 fn lexes_keywords() {
     let tokens = lex_all_tokens(
-        "true false return let for fn while loop if static as mut const break continue",
+        "true false return let for fn while loop if static as mut const break continue mod use pub priv struct enum union",
     )
     .unwrap();
 
@@ -148,6 +148,13 @@ fn lexes_keywords() {
             Token::Const,
             Token::Break,
             Token::Continue,
+            Token::Mod,
+            Token::Use,
+            Token::Pub,
+            Token::Priv,
+            Token::Struct,
+            Token::Enum,
+            Token::Union,
             Token::Eof,
         ]
     );

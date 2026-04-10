@@ -7,16 +7,16 @@ pub struct Program<'a>(pub Vec<Item<'a>>);
 #[derive(Debug)]
 pub enum ItemKind<'a> {
     Module(Module<'a>),
-    Use(),
+    Use(Use<'a>),
     Fn(Fn<'a>),
-    Extern(),
+    Extern(Vec<Item<'a>>),
 
     Static(StaticItem<'a>),
     Constant(ConstItem<'a>),
 
-    Struct(),
-    Enum(),
-    Union(),
+    Struct(Struct<'a>),
+    Enum(Enum<'a>),
+    Union(Union<'a>),
 }
 
 #[derive(Debug)]
@@ -33,44 +33,57 @@ pub enum Vis {
 }
 
 #[derive(Debug)]
-pub struct NammedField<'a>{
-    pub name: Symbol<'a>,
-    pub ty: Type<'a>
+pub enum UseKind<'a> {
+    Star(Node),
+    Sym(Symbol<'a>),
 }
 
 #[derive(Debug)]
-pub struct Union<'a>{
-    pub name: Symbol<'a>,
-    pub fields: FieldsKind<'a>
+pub struct Use<'a> {
+    pub kind: UseKind<'a>,
+    pub childern: Vec<Use<'a>>,
+    pub node: Node,
 }
 
 #[derive(Debug)]
-pub enum FieldsKind<'a>{
+pub struct NammedField<'a> {
+    pub name: Symbol<'a>,
+    pub ty: Type<'a>,
+}
+
+#[derive(Debug)]
+pub struct Union<'a> {
+    pub name: Symbol<'a>,
+    pub fields: Vec<NammedField<'a>>,
+}
+
+#[derive(Debug)]
+pub enum FieldsKind<'a> {
     None,
     Tuple(Vec<Type<'a>>),
-    Nammed(Vec<NammedField<'a>>)
+    Nammed(Vec<NammedField<'a>>),
 }
 
 #[derive(Debug)]
-pub struct Struct<'a>{
+pub struct Struct<'a> {
     pub name: Symbol<'a>,
-    pub fields: Vec<NammedField<'a>>
+    pub fields: FieldsKind<'a>,
 }
 
 #[derive(Debug)]
-pub struct Enum<'a>{
+pub struct Enum<'a> {
     pub name: Symbol<'a>,
-    pub varients: FieldsKind<'a>
+    pub varients: Vec<EnumVarient<'a>>,
 }
 
 #[derive(Debug)]
-pub struct EnumVarient<'a>{
+pub struct EnumVarient<'a> {
     pub name: Symbol<'a>,
-
+    pub fields: FieldsKind<'a>,
 }
 
 #[derive(Debug)]
-pub struct StaticItem<'a>{
+pub struct StaticItem<'a> {
     pub name: Symbol<'a>,
     pub ty: Type<'a>,
     pub mutability: Mutability,
@@ -78,7 +91,7 @@ pub struct StaticItem<'a>{
 }
 
 #[derive(Debug)]
-pub struct ConstItem<'a>{
+pub struct ConstItem<'a> {
     pub name: Symbol<'a>,
     pub ty: Type<'a>,
     pub mutability: Mutability,
@@ -148,7 +161,13 @@ pub struct Label<'a> {
 
 #[derive(Debug)]
 pub struct Path<'a> {
-    pub sym: Symbol<'a>,
+    pub sym: Vec<PathPart<'a>>,
+    pub node: Node,
+}
+
+#[derive(Debug)]
+pub struct PathPart<'a> {
+    pub part: Symbol<'a>,
 }
 
 #[derive(Debug)]

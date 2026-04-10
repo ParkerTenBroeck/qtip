@@ -60,19 +60,27 @@ pub enum Token<'a> {
 
     Fn,
     Static,
-    Return,
+    Let,
+    For,
+
     If,
     Else,
     While,
     Loop,
-    Let,
-    For,
+
+    Break,
+    Continue,
+    Return,
+
     As,
     Const,
     Mut,
-    Break,
-    Continue,
+
     Mod,
+    Use,
+
+    Pub,
+    Priv,
 
     Struct,
     Enum,
@@ -200,6 +208,9 @@ impl fmt::Display for Token<'_> {
             Self::Break => display_token_text(f, "break"),
             Self::Continue => display_token_text(f, "continue"),
             Self::Mod => display_token_text(f, "mod"),
+            Self::Use => display_token_text(f, "use"),
+            Self::Pub => display_token_text(f, "pub"),
+            Self::Priv => display_token_text(f, "priv"),
             Self::Struct => display_token_text(f, "struct"),
             Self::Enum => display_token_text(f, "enum"),
             Self::Union => display_token_text(f, "union"),
@@ -234,8 +245,11 @@ impl<'a> Token<'a> {
                 | Token::Static
                 | Token::Const
                 | Token::Mod
+                | Token::Use
                 | Token::Fn
-                | Token::Ident("pub")
+                | Token::Pub
+                | Token::Priv
+                | Token::Ident("extern")
         )
     }
 
@@ -248,8 +262,11 @@ impl<'a> Token<'a> {
                 | Token::Static
                 | Token::Const
                 | Token::Mod
+                | Token::Use
                 | Token::Fn
-                | Token::Ident("pub")
+                | Token::Pub
+                | Token::Priv
+                | Token::Ident("extern")
                 | Token::Let
                 | Token::LPar
                 | Token::LBrace

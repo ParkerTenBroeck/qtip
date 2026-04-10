@@ -178,7 +178,7 @@ impl<'a> Parser<'a> {
             self.next();
         } else {
             self.ctx.report(UnexpectedToken {
-                node: self.next.node,
+                node: self.previous.node.after(),
                 found: self.next.value,
                 expected: open,
             });
@@ -189,7 +189,7 @@ impl<'a> Parser<'a> {
 
         if !self.next.value.delim_close() && !self.next.value.eof() {
             self.ctx.report(UnexpectedToken {
-                node: self.next.node,
+                node: self.previous.node.after(),
                 found: self.next.value,
                 expected: close,
             });
@@ -244,7 +244,7 @@ impl<'a> Parser<'a> {
     fn expect_token(&mut self, expected: Token<'a>) -> PResult<()> {
         if self.next.value != expected {
             self.ctx.report(UnexpectedToken {
-                node: self.next.node,
+                node: self.previous.node.after(),
                 found: self.next.value,
                 expected,
             });
@@ -309,7 +309,7 @@ impl<'a> Parser<'a> {
             })
         } else {
             self.ctx.report(ExpectedSymbol {
-                node: self.next.node,
+                node: self.previous.node.after(),
                 found: self.next.value,
             });
             if !self.next.value.delim() {
@@ -319,16 +319,59 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn consume_path_sep(&mut self) -> bool {
+        if self.next.value == Token::Colon {
+            self.next();
+            if self.next.value == Token::Colon {
+                self.next();
+                true
+            } else {
+                self.ctx.report(UnexpectedToken {
+                    node: self.previous.node.after(),
+                    found: self.next.value,
+                    expected: Token::Colon,
+                });
+                false
+            }
+        } else {
+            false
+        }
+    }
+
     fn parse_path(&mut self) -> PResult<ast::Path<'a>> {
+        let start = self.next.node;
+        let mut sym = vec![];
+
+        if self.next.value == Token::Colon {
+            self.consume_path_sep();
+        }
+
+        sym.push(ast::PathPart {
+            part: self.parse_symbol()?,
+        });
+
+        while self.next.value == Token::Colon {
+            if !self.consume_path_sep() {
+                break;
+            }
+            sym.push(ast::PathPart {
+                part: self.parse_symbol()?,
+            });
+        }
+
         Ok(ast::Path {
-            sym: self.parse_symbol()?,
+            node: self.ctx.join(start, self.previous.node),
+            sym,
         })
     }
 
     fn parse_vis(&mut self) -> ast::Vis {
-        if self.next.value == Token::Ident("pub") {
+        if self.next.value == Token::Pub {
             self.next();
             ast::Vis::Pub
+        } else if self.next.value == Token::Priv {
+            self.next();
+            ast::Vis::Priv
         } else {
             ast::Vis::Priv
         }

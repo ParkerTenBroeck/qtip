@@ -60,6 +60,12 @@ fn ident(ident: &str) -> Token<'_> {
         "break" => Token::Break,
         "continue" => Token::Continue,
         "mod" => Token::Mod,
+        "use" => Token::Use,
+        "pub" => Token::Pub,
+        "priv" => Token::Priv,
+        "enum" => Token::Enum,
+        "struct" => Token::Struct,
+        "union" => Token::Union,
         o => Token::Ident(o),
     }
 }

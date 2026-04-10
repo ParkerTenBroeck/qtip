@@ -15,7 +15,27 @@ fn main (foo: fn((), (i32), (i32,)) -> i32) -> i32 {
 }
 */
 
+const BEEP: i32 = 12;
+
+struct Meow{
+    value: i32,
+}
+
+struct Meow;
+struct Meow();
+
+enum Meow{
+    Foo,
+    Bar(i32, ),
+    Baz{}
+}
+
+extern {
+    fn foo();
+}
 
 fn meow(wow: &pin mut [i32]){
-    &mut bar.baz()
+    &mut bar.baz;
+    ::bar::baz();
+
 }

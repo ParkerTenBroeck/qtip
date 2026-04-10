@@ -8,6 +8,12 @@ use std::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct SrcIdx(u32);
 
+impl SrcIdx {
+    pub fn idx(&self) -> u32 {
+        self.0
+    }
+}
+
 pub struct SourceMap {
     map: UnsafeCell<SourceMapInner>,
 }

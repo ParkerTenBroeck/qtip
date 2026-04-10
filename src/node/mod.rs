@@ -2,11 +2,23 @@ use std::num::NonZeroU32;
 
 use crate::{source::SrcIdx, span::Span};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Node {
     pub span: Span,
     pub src: SrcIdx,
     pub parent: Option<ParentIdx>,
+}
+
+impl std::fmt::Debug for Node {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}@{}..{}",
+            self.src.idx(),
+            self.span.start,
+            self.span.end
+        )
+    }
 }
 
 impl Node {
