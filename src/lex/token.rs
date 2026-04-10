@@ -259,6 +259,10 @@ impl<'a> Token<'a> {
                 | Token::Loop
                 | Token::At
                 | Token::Ident(_)
+                | Token::Minus
+                | Token::Bang
+                | Token::Ampersand
+                | Token::Star
                 | Token::Return
                 | Token::Break
                 | Token::Continue

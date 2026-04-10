@@ -31,11 +31,47 @@ impl<'a> Parser<'a> {
     }
 
     pub(super) fn parse_type(&mut self) -> PResult<ast::Type<'a>> {
+
         let kind = match self.next.value {
             Token::Ident(_) | Token::Colon => ast::TypeKind::Path(self.parse_path()?),
             Token::Bang => {
                 self.next();
                 ast::TypeKind::Never
+            }
+            Token::Ampersand => {
+                self.next();
+                let ref_kind = match self.next.value {
+                    Token::Ident("raw") => {
+                        self.next();
+                        ast::RefKind::Ptr
+                    }
+                    Token::Ident("pin") => {
+                        self.next();
+                        ast::RefKind::Pinned
+                    }
+                    _ => ast::RefKind::Ref,
+                };
+                let mutability = if self.consume_if(Token::Mut) {
+                    ast::Mutability::Mut
+                } else {
+                    ast::Mutability::Const
+                };
+                ast::TypeKind::Ref(mutability, ref_kind, Box::new(self.parse_type()?))
+            }
+            Token::Star => {
+                self.next();
+                let mutability = if self.consume_if(Token::Const) {
+                    ast::Mutability::Const
+                } else if self.consume_if(Token::Mut) {
+                    ast::Mutability::Mut
+                } else {
+                    self.ctx.report(ExpectedType {
+                        node: self.previous.node,
+                        found: self.previous.value,
+                    });
+                    return Err(());
+                };
+                ast::TypeKind::Ref(mutability, ast::RefKind::Ptr, Box::new(self.parse_type()?))
             }
             Token::Fn => {
                 self.next();
@@ -62,6 +98,19 @@ impl<'a> Parser<'a> {
                     ast::TypeKind::Paren(Box::new(types.remove(0)))
                 } else {
                     ast::TypeKind::Tuple(types)
+                }
+            }
+            Token::LBracket => {
+                self.next();
+                let ty = self.parse_type()?;
+
+                if self.consume_if(Token::Semicolon) {
+                    let expr = self.parse_expr()?;
+                    self.expect_token(Token::RBracket)?;
+                    ast::TypeKind::Array(Box::new(ty), Box::new(expr))
+                } else {
+                    self.expect_token(Token::RBracket)?;
+                    ast::TypeKind::Slice(Box::new(ty))
                 }
             }
             _ => {

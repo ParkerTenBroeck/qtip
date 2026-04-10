@@ -11,8 +11,8 @@ pub enum ItemKind<'a> {
     Fn(Fn<'a>),
     Extern(),
 
-    Static(),
-    Constant(),
+    Static(StaticItem<'a>),
+    Constant(ConstItem<'a>),
 
     Struct(),
     Enum(),
@@ -30,6 +30,59 @@ pub struct Item<'a> {
 pub enum Vis {
     Pub,
     Priv,
+}
+
+#[derive(Debug)]
+pub struct NammedField<'a>{
+    pub name: Symbol<'a>,
+    pub ty: Type<'a>
+}
+
+#[derive(Debug)]
+pub struct Union<'a>{
+    pub name: Symbol<'a>,
+    pub fields: FieldsKind<'a>
+}
+
+#[derive(Debug)]
+pub enum FieldsKind<'a>{
+    None,
+    Tuple(Vec<Type<'a>>),
+    Nammed(Vec<NammedField<'a>>)
+}
+
+#[derive(Debug)]
+pub struct Struct<'a>{
+    pub name: Symbol<'a>,
+    pub fields: Vec<NammedField<'a>>
+}
+
+#[derive(Debug)]
+pub struct Enum<'a>{
+    pub name: Symbol<'a>,
+    pub varients: FieldsKind<'a>
+}
+
+#[derive(Debug)]
+pub struct EnumVarient<'a>{
+    pub name: Symbol<'a>,
+
+}
+
+#[derive(Debug)]
+pub struct StaticItem<'a>{
+    pub name: Symbol<'a>,
+    pub ty: Type<'a>,
+    pub mutability: Mutability,
+    pub expr: Option<Expr<'a>>,
+}
+
+#[derive(Debug)]
+pub struct ConstItem<'a>{
+    pub name: Symbol<'a>,
+    pub ty: Type<'a>,
+    pub mutability: Mutability,
+    pub expr: Expr<'a>,
 }
 
 #[derive(Debug)]
@@ -73,8 +126,7 @@ pub enum TypeKind<'a> {
     Slice(Box<Type<'a>>),
     Array(Box<Type<'a>>, Box<Expr<'a>>),
 
-    Ptr(Box<Type<'a>>),
-    Ref(Box<Type<'a>>),
+    Ref(Mutability, RefKind, Box<Type<'a>>),
 }
 
 #[derive(Debug)]
@@ -233,9 +285,19 @@ pub struct Expr<'a> {
 }
 
 #[derive(Debug)]
-pub enum Mutability{
+pub enum Mutability {
     Const,
     Mut,
+}
+
+#[derive(Debug)]
+pub enum RefKind {
+    /// &, &mut
+    Ref,
+    /// &raw, &raw mut
+    Ptr,
+    /// &pin, &pin mut
+    Pinned,
 }
 
 #[derive(Debug)]
@@ -256,9 +318,7 @@ pub enum ExprKind<'a> {
     },
     Field(Box<Expr<'a>>, Symbol<'a>),
     /// &T, &mut T
-    Ref(Mutability, Box<Expr<'a>>),
-    /// *const T, *mut T
-    Ptr(Mutability, Box<Expr<'a>>),
+    Ref(Mutability, RefKind, Box<Expr<'a>>),
     Deref(Box<Expr<'a>>),
     Index(Box<Expr<'a>>, Box<Expr<'a>>),
     BinOp {

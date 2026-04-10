@@ -3,7 +3,7 @@ use crate::parser::*;
 use crate::{diag::parse::*, lex::Token};
 
 impl<'a> Parser<'a> {
-    fn parse_expr(&mut self) -> PResult<ast::Expr<'a>> {
+    pub(super) fn parse_expr(&mut self) -> PResult<ast::Expr<'a>> {
         self.parse_expr_binop(0)
     }
 
@@ -90,8 +90,114 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_expr_3(&mut self) -> PResult<ast::Expr<'a>> {
-        // parse regular unop
-        self.parse_expr_bottom()
+        let start = self.next.node;
+        let kind = match self.next.value {
+            Token::Minus => {
+                self.next();
+                ast::ExprKind::UnOp {
+                    expr: Box::new(self.parse_expr_3()?),
+                    op: ast::UnOp::Neg,
+                }
+            }
+            Token::Bang => {
+                self.next();
+                ast::ExprKind::UnOp {
+                    expr: Box::new(self.parse_expr_3()?),
+                    op: ast::UnOp::Not,
+                }
+            }
+            Token::Ampersand => {
+                self.next();
+                let ref_kind = match self.next.value {
+                    Token::Ident("raw") => {
+                        self.next();
+                        ast::RefKind::Ptr
+                    }
+                    Token::Ident("pin") => {
+                        self.next();
+                        ast::RefKind::Pinned
+                    }
+                    _ => ast::RefKind::Ref,
+                };
+                let mutability = if self.consume_if(Token::Mut) {
+                    ast::Mutability::Mut
+                } else {
+                    ast::Mutability::Const
+                };
+                ast::ExprKind::Ref(mutability, ref_kind, Box::new(self.parse_expr_3()?))
+            }
+            Token::Star => {
+                self.next();
+                ast::ExprKind::Deref(Box::new(self.parse_expr_3()?))
+            }
+            _ => return self.parse_expr_postfix(),
+        };
+
+        Ok(ast::Expr {
+            node: self.ctx.join(start, self.previous.node),
+            kind,
+        })
+    }
+
+    fn parse_expr_postfix(&mut self) -> PResult<ast::Expr<'a>> {
+        let mut expr = self.parse_expr_bottom()?;
+
+        loop {
+            expr = match self.next.value {
+                Token::LPar => {
+                    let start = expr.node;
+                    let mut args = vec![];
+                    self.parse_delim(Delimiter::Paren, |parser| {
+                        while !matches!(parser.next.value, Token::RPar | Token::Eof) {
+                            match parser.parse_expr() {
+                                Ok(arg) => args.push(arg),
+                                Err(_) => {
+                                    while !matches!(
+                                        parser.next.value,
+                                        Token::RPar | Token::Eof | Token::Comma
+                                    ) {
+                                        parser.next();
+                                    }
+                                }
+                            }
+
+                            if !parser.consume_if(Token::Comma) {
+                                break;
+                            }
+                        }
+                    })?;
+
+                    ast::Expr {
+                        node: self.ctx.join(start, self.previous.node),
+                        kind: ast::ExprKind::FuncCall {
+                            ptr: Box::new(expr),
+                            args,
+                        },
+                    }
+                }
+                Token::Dot => {
+                    let start = expr.node;
+                    self.next();
+                    let field = self.parse_symbol()?;
+                    ast::Expr {
+                        node: self.ctx.join(start, self.previous.node),
+                        kind: ast::ExprKind::Field(Box::new(expr), field),
+                    }
+                }
+                Token::LBracket => {
+                    let start = expr.node;
+                    let index =
+                        self.parse_delim(Delimiter::Bracket, |parser| parser.parse_expr())??;
+                    ast::Expr {
+                        node: self.ctx.join(start, self.previous.node),
+                        kind: ast::ExprKind::Index(Box::new(expr), Box::new(index)),
+                    }
+                }
+                _ => break,
+            };
+        }
+
+        Ok(expr)
     }
 
     fn parse_if_chain(&mut self, label: Option<ast::Label<'a>>) -> PResult<ast::Expr<'a>> {

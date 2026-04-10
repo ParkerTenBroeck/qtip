@@ -1,5 +1,6 @@
 mod meow;
 
+/*
 fn main (foo: fn((), (i32), (i32,)) -> i32) -> i32 {
     //path::meow::Nya![Baz]::AssociatedType
 
@@ -9,6 +10,12 @@ fn main (foo: fn((), (i32), (i32,)) -> i32) -> i32 {
         break @foo 12
         break @foo 12
     } else if 1+2{
-
+        
     }
+}
+*/
+
+
+fn meow(wow: &pin mut [i32]){
+    &mut bar.baz()
 }
