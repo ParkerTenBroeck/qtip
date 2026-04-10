@@ -118,8 +118,10 @@ pub struct IncorrectDelimiters {
 }
 
 #[derive(Subdiagnostic)]
-#[multipart_suggestion("")]
+#[multipart_suggestion("replace {replace} with {replacement}")]
 pub struct DelimiterFix {
+    pub replace: &'static str,
+    pub replacement: &'static str,
     #[suggestion_part(code = "{lhs_delim}")]
     pub lhs: Node,
     pub lhs_delim: &'static str,

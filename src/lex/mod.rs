@@ -174,21 +174,21 @@ impl<'a> Lexer<'a> {
                 },
                 Some('!') => match consume_if!('=') {
                     Some('=') => Ok(Token::NotEquals),
-                    _ => Ok(Token::LogicalNot),
+                    _ => Ok(Token::Bang),
                 },
                 Some('|') => match consume_if!('=' | '|') {
                     Some('=') => Ok(Token::OrAssign),
-                    Some('|') => Ok(Token::LogicalOr),
-                    _ => Ok(Token::BitwiseOr),
+                    Some('|') => Ok(Token::OrOr),
+                    _ => Ok(Token::Or),
                 },
                 Some('&') => match consume_if!('=' | '&') {
                     Some('=') => Ok(Token::AndAssign),
-                    Some('&') => Ok(Token::LogicalAnd),
+                    Some('&') => Ok(Token::AndAnd),
                     _ => Ok(Token::Ampersand),
                 },
                 Some('^') => match consume_if!('=') {
                     Some('=') => Ok(Token::XorAssign),
-                    _ => Ok(Token::BitwiseXor),
+                    _ => Ok(Token::Carrot),
                 },
                 Some('.') => match consume_if!('.') {
                     Some('.') => match consume_if!('=') {
@@ -231,7 +231,7 @@ impl<'a> Lexer<'a> {
                 Some('}') => Ok(Token::RBrace),
                 Some('[') => Ok(Token::LBracket),
                 Some(']') => Ok(Token::RBracket),
-                Some('~') => Ok(Token::BitwiseNot),
+                Some('~') => Ok(Token::Tilde),
                 Some(',') => Ok(Token::Comma),
                 Some('?') => Ok(Token::QuestionMark),
                 Some(';') => Ok(Token::Semicolon),

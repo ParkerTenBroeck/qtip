@@ -31,6 +31,7 @@ impl<'a> Compiler<'a> {
         match self.sources.load(program) {
             Ok(src) => {
                 let program = Parser::new(self.ctx.clone(), src).parse();
+                println!("{:#?}", program);
                 self.programs.insert(src.idx, program);
                 self.programs.get(&src.idx).ok_or(())
             }

@@ -23,6 +23,7 @@ pub struct Parser<'a> {
     ctx: Context<'a>,
 
     lexer: Lexer<'a>,
+
     previous: N<Token<'a>>,
     next: N<Token<'a>>,
 
@@ -192,13 +193,49 @@ impl<'a> Parser<'a> {
                 found: self.next.value,
                 expected: close,
             });
+        } else if self.next.value.delim_close() && self.delimiter_stack.len() == level + 1 {
+            match (open_got.value, self.next.value, delim) {
+                (Token::LPar, Token::RPar, Delimiter::Brace | Delimiter::Bracket)
+                | (Token::LBrace, Token::RBrace, Delimiter::Paren | Delimiter::Bracket)
+                | (Token::LBracket, Token::RBracket, Delimiter::Brace | Delimiter::Paren) => {
+                    let lhs = open_got.node;
+                    let rhs = self.next.node;
+                    self.ctx.report(IncorrectDelimiters {
+                        lhs,
+                        rhs,
+                        fix: DelimiterFix {
+                            replace: match open_got.value {
+                                Token::LPar => "parenthesis",
+                                Token::LBrace => "braces",
+                                Token::LBracket => "brackets",
+                                _ => unreachable!(),
+                            },
+                            replacement: match delim {
+                                Delimiter::Paren => "parenthesis",
+                                Delimiter::Brace => "braces",
+                                Delimiter::Bracket => "brackets",
+                            },
+                            lhs,
+                            lhs_delim: match delim {
+                                Delimiter::Paren => "(",
+                                Delimiter::Brace => "{",
+                                Delimiter::Bracket => "[",
+                            },
+                            rhs,
+                            rhs_delim: match delim {
+                                Delimiter::Paren => ")",
+                                Delimiter::Brace => "}",
+                                Delimiter::Bracket => "]",
+                            },
+                        },
+                    });
+                }
+
+                _ => {}
+            }
         }
         while !self.next.value.eof() && self.delimiter_stack.len() > level {
             self.next();
-        }
-
-        if self.previous.value.delim_close() && self.delimiter_stack.len() == level {
-            
         }
 
         Ok(ret)
@@ -280,6 +317,12 @@ impl<'a> Parser<'a> {
             }
             Err(())
         }
+    }
+
+    fn parse_path(&mut self) -> PResult<ast::Path<'a>> {
+        Ok(ast::Path {
+            sym: self.parse_symbol()?,
+        })
     }
 
     fn parse_vis(&mut self) -> ast::Vis {

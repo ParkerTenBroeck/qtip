@@ -20,11 +20,11 @@ impl<'a> Parser<'a> {
                 Token::Star if BinOp::Mul.precedence() >= min_prec => BinOp::Mul,
                 Token::Slash if BinOp::Div.precedence() >= min_prec => BinOp::Div,
                 Token::Percent if BinOp::Rem.precedence() >= min_prec => BinOp::Rem,
-                Token::LogicalOr if BinOp::Or.precedence() >= min_prec => BinOp::Or,
-                Token::BitwiseOr if BinOp::Or.precedence() >= min_prec => BinOp::Or,
+                Token::OrOr if BinOp::Or.precedence() >= min_prec => BinOp::Or,
+                Token::Or if BinOp::Or.precedence() >= min_prec => BinOp::Or,
                 Token::Ampersand if BinOp::And.precedence() >= min_prec => BinOp::And,
-                Token::LogicalAnd if BinOp::And.precedence() >= min_prec => BinOp::And,
-                Token::BitwiseXor if BinOp::Xor.precedence() >= min_prec => BinOp::Xor,
+                Token::AndAnd if BinOp::And.precedence() >= min_prec => BinOp::And,
+                Token::Carrot if BinOp::Xor.precedence() >= min_prec => BinOp::Xor,
                 Token::ShiftLeft if BinOp::Shl.precedence() >= min_prec => BinOp::Shl,
                 Token::ShiftRight if BinOp::Shr.precedence() >= min_prec => BinOp::Shr,
                 Token::GreaterThan if BinOp::Gt.precedence() >= min_prec => {
@@ -141,37 +141,46 @@ impl<'a> Parser<'a> {
             kind,
         })
     }
-    
-    fn parse_label_opt(&mut self) -> PResult<Option<ast::Label<'a>>>{
-        if self.consume_if(Token::At){
-            Ok(Some(ast::Label{
+
+    fn parse_label_opt(&mut self) -> PResult<Option<ast::Label<'a>>> {
+        if self.consume_if(Token::At) {
+            Ok(Some(ast::Label {
                 sym: self.parse_symbol()?,
             }))
-        }else{
+        } else {
             Ok(None)
         }
-    } 
+    }
 
     fn parse_expr_bottom(&mut self) -> PResult<ast::Expr<'a>> {
-
         let start = self.next.node;
         let kind = match self.next.value {
             Token::LBrace | Token::If | Token::While | Token::Loop | Token::For => {
-                return self.parse_expr_labled(None);   
+                return self.parse_expr_labled(None);
             }
             Token::Return => {
                 self.next();
-                ast::ExprKind::Return(Box::new(self.parse_expr()?))
+                let expr = if self.next.value.starts_stmt() {
+                    Some(Box::new(self.parse_expr()?))
+                } else {
+                    None
+                };
+                ast::ExprKind::Return(expr)
             }
             Token::Continue => {
                 self.next();
                 let label = self.parse_label_opt()?;
-                ast::ExprKind::Continue(Box::new(self.parse_expr()?), label)
+                ast::ExprKind::Continue(label)
             }
             Token::Break => {
                 self.next();
                 let label = self.parse_label_opt()?;
-                ast::ExprKind::Break(Box::new(self.parse_expr()?), label)
+                let expr = if self.next.value.starts_stmt() {
+                    Some(Box::new(self.parse_expr()?))
+                } else {
+                    None
+                };
+                ast::ExprKind::Break(expr, label)
             }
             Token::At => {
                 let label = self.parse_label_opt()?;
@@ -197,10 +206,35 @@ impl<'a> Parser<'a> {
                 self.next();
                 ast::ExprKind::Literal(ast::Literal::Bool(true))
             }
-            Token::Ident(_) => ast::ExprKind::Path(self.parse_symbol()?),
-            Token::LPar => self.parse_delim(Delimiter::Paren, |parser| {
-                Ok(ast::ExprKind::Paren(Box::new(parser.parse_expr()?)))
-            })??,
+            Token::Ident(_) | Token::Colon => ast::ExprKind::Path(self.parse_path()?),
+            Token::LPar => {
+                let mut trailing_comma = false;
+                let mut exprs = vec![];
+                self.parse_delim(Delimiter::Paren, |parser| {
+                    while !matches!(parser.next.value, Token::RPar | Token::Eof) {
+                        match parser.parse_expr() {
+                            Ok(ok) => exprs.push(ok),
+                            Err(_) => {
+                                while !matches!(
+                                    parser.next.value,
+                                    Token::RPar | Token::Eof | Token::Comma
+                                ) {
+                                    parser.next();
+                                }
+                            }
+                        }
+                        trailing_comma = parser.consume_if(Token::Comma);
+                        if !trailing_comma {
+                            break;
+                        }
+                    }
+                })?;
+                if exprs.len() == 1 && !trailing_comma {
+                    ast::ExprKind::Paren(Box::new(exprs.remove(0)))
+                } else {
+                    ast::ExprKind::Tuple(exprs)
+                }
+            }
             _ => {
                 self.ctx.report(ExpectedExpression {
                     node: self.next.node,

@@ -1,10 +1,10 @@
 mod meow;
 
-fn main (foo: i32) -> i32 {
+fn main (foo: fn((), (i32), (i32,)) -> i32) -> i32 {
     //path::meow::Nya![Baz]::AssociatedType
 
     let meow = @foo if false {
-        break @foo 12
+        break @foo break @bar break {break break break break break} 
         break @foo 12
         break @foo 12
         break @foo 12

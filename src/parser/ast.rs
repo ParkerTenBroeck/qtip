@@ -10,8 +10,10 @@ pub enum ItemKind<'a> {
     Use(),
     Fn(Fn<'a>),
     Extern(),
+
     Static(),
     Constant(),
+
     Struct(),
     Enum(),
     Union(),
@@ -58,7 +60,21 @@ pub struct FnParam<'a> {
 
 #[derive(Debug)]
 pub struct Type<'a> {
-    pub name: Symbol<'a>,
+    pub kind: TypeKind<'a>,
+}
+
+#[derive(Debug)]
+pub enum TypeKind<'a> {
+    Path(Path<'a>),
+    Never,
+    FnPtr(Vec<Type<'a>>, Option<Box<Type<'a>>>),
+    Tuple(Vec<Type<'a>>),
+    Paren(Box<Type<'a>>),
+    Slice(Box<Type<'a>>),
+    Array(Box<Type<'a>>, Box<Expr<'a>>),
+
+    Ptr(Box<Type<'a>>),
+    Ref(Box<Type<'a>>),
 }
 
 #[derive(Debug)]
@@ -66,6 +82,21 @@ pub struct Let<'a> {
     pub name: Symbol<'a>,
     pub ty: Option<Type<'a>>,
     pub initializer: Option<Expr<'a>>,
+}
+
+#[derive(Debug)]
+pub struct Block<'a> {
+    pub stmts: Vec<Stmt<'a>>,
+}
+
+#[derive(Debug)]
+pub struct Label<'a> {
+    pub sym: Symbol<'a>,
+}
+
+#[derive(Debug)]
+pub struct Path<'a> {
+    pub sym: Symbol<'a>,
 }
 
 #[derive(Debug)]
@@ -196,25 +227,15 @@ pub enum UnOp {
 }
 
 #[derive(Debug)]
-pub struct CondBlock<'a> {
-    pub cond: Expr<'a>,
-    pub block: Expr<'a>,
-}
-
-#[derive(Debug)]
-pub struct Block<'a> {
-    pub stmts: Vec<Stmt<'a>>,
-}
-
-#[derive(Debug)]
 pub struct Expr<'a> {
     pub node: Node,
     pub kind: ExprKind<'a>,
 }
 
 #[derive(Debug)]
-pub struct Label<'a> {
-    pub sym: Symbol<'a>,
+pub enum Mutability{
+    Const,
+    Mut,
 }
 
 #[derive(Debug)]
@@ -233,6 +254,13 @@ pub enum ExprKind<'a> {
         ptr: Box<Expr<'a>>,
         args: Vec<Expr<'a>>,
     },
+    Field(Box<Expr<'a>>, Symbol<'a>),
+    /// &T, &mut T
+    Ref(Mutability, Box<Expr<'a>>),
+    /// *const T, *mut T
+    Ptr(Mutability, Box<Expr<'a>>),
+    Deref(Box<Expr<'a>>),
+    Index(Box<Expr<'a>>, Box<Expr<'a>>),
     BinOp {
         lhs: Box<Expr<'a>>,
         op: BinOp,
@@ -246,12 +274,13 @@ pub enum ExprKind<'a> {
         expr: Box<Expr<'a>>,
         ty: Type<'a>,
     },
-    Path(Symbol<'a>),
+    Path(Path<'a>),
     Literal(Literal<'a>),
     Paren(Box<Expr<'a>>),
-    Break(Box<Expr<'a>>, Option<Label<'a>>),
-    Continue(Box<Expr<'a>>, Option<Label<'a>>),
-    Return(Box<Expr<'a>>),
+    Tuple(Vec<Expr<'a>>),
+    Break(Option<Box<Expr<'a>>>, Option<Label<'a>>),
+    Continue(Option<Label<'a>>),
+    Return(Option<Box<Expr<'a>>>),
 }
 
 #[derive(Debug)]

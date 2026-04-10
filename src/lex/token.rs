@@ -15,12 +15,12 @@ pub enum Token<'a> {
     Star,
     Slash,
     Ampersand,
-    BitwiseOr,
-    BitwiseXor,
-    BitwiseNot,
-    LogicalAnd,
-    LogicalOr,
-    LogicalNot,
+    Or,
+    Carrot,
+    Tilde,
+    AndAnd,
+    OrOr,
+    Bang,
     Dec,
     Inc,
     ShiftLeft,
@@ -147,12 +147,12 @@ impl fmt::Display for Token<'_> {
             Self::Star => display_token_text(f, "*"),
             Self::Slash => display_token_text(f, "/"),
             Self::Ampersand => display_token_text(f, "&"),
-            Self::BitwiseOr => display_token_text(f, "|"),
-            Self::BitwiseXor => display_token_text(f, "^"),
-            Self::BitwiseNot => display_token_text(f, "~"),
-            Self::LogicalAnd => display_token_text(f, "&&"),
-            Self::LogicalOr => display_token_text(f, "||"),
-            Self::LogicalNot => display_token_text(f, "!"),
+            Self::Or => display_token_text(f, "|"),
+            Self::Carrot => display_token_text(f, "^"),
+            Self::Tilde => display_token_text(f, "~"),
+            Self::AndAnd => display_token_text(f, "&&"),
+            Self::OrOr => display_token_text(f, "||"),
+            Self::Bang => display_token_text(f, "!"),
             Self::Dec => display_token_text(f, "--"),
             Self::Inc => display_token_text(f, "++"),
             Self::ShiftLeft => display_token_text(f, "<<"),
@@ -261,6 +261,7 @@ impl<'a> Token<'a> {
                 | Token::Ident(_)
                 | Token::Return
                 | Token::Break
+                | Token::Continue
         ) || self.is_literal()
     }
 
@@ -316,7 +317,7 @@ mod tests {
     fn display_literals_and_alternate() {
         assert_eq!(
             Token::StringLiteral(StringLiteral::new("a\nb")).to_string(),
-            "`\"a\\nb\"`"
+            "`\\\"a\\\\nb\\\"`"
         );
         assert_eq!(format!("{:#}", Token::TrueLiteral), "literal");
     }
