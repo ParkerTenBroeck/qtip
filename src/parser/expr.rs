@@ -85,8 +85,21 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_expr_2(&mut self, allow_struct_init: bool) -> PResult<ast::Expr<'a>> {
-        //todo parse as
-        self.parse_expr_3(allow_struct_init)
+        let start = self.next.node;
+        let mut expr = self.parse_expr_3(allow_struct_init)?;
+
+        while self.consume_if(Token::As) {
+            let ty = self.parse_type()?;
+            expr = ast::Expr {
+                node: self.ctx.join(start, self.previous.node),
+                kind: ast::ExprKind::Cast {
+                    expr: Box::new(expr),
+                    ty,
+                },
+            };
+        }
+
+        Ok(expr)
     }
 
     fn parse_expr_3(&mut self, allow_struct_init: bool) -> PResult<ast::Expr<'a>> {

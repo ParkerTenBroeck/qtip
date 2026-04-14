@@ -6,3 +6,4 @@ pub mod node;
 pub mod parser;
 pub mod source;
 pub mod span;
+pub mod tir;

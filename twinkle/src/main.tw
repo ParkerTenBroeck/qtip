@@ -47,5 +47,10 @@ fn meow(wow: &pin mut [i32]) -> fn(){
         break @foo 12
     }
 
+    Struct {
+        meow: bar,
+        nya: 33+12,
+    };
+
     |x|[value, &meow] -> i32 x;
 }
