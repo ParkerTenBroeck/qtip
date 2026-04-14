@@ -53,6 +53,24 @@ pub struct ExpectedExpression<'a> {
 }
 
 #[derive(Diagnostic)]
+#[diag("lambda expression bodies cannot have an explicit return type")]
+pub struct LambdaExprBodyCannotHaveReturnType {
+    #[primary_node]
+    pub node: Node,
+    #[subdiagnostic]
+    pub wrap_in_block: WrapExprInBraces,
+}
+
+#[derive(Subdiagnostic)]
+#[multipart_suggestion("wrap this expression body in braces")]
+pub struct WrapExprInBraces {
+    #[suggestion_part(code = "{{ ")]
+    pub open: Node,
+    #[suggestion_part(code = " }}")]
+    pub close: Node,
+}
+
+#[derive(Diagnostic)]
 #[diag("expected 'if', `for`, `loop`, `while`, `{{`, found {found}")]
 pub struct ExpectedLabeledExpression<'a> {
     #[primary_node]

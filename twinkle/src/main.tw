@@ -34,8 +34,18 @@ extern {
     fn foo();
 }
 
-fn meow(wow: &pin mut [i32]){
+fn meow(wow: &pin mut [i32]) -> fn(){
     &mut bar.baz;
-    ::bar::baz();
+    ::bar::baz() + ::sym;
 
+    use meow::*;
+
+    if meow {
+        break @foo break @bar break {break break break break break} 
+        break @foo 12
+        break @foo 12
+        break @foo 12
+    }
+
+    |x|[value, &meow] -> i32 x;
 }

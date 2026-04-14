@@ -29,6 +29,14 @@ impl Node {
             parent: None,
         }
     }
+    
+    pub fn before(&self) -> Node {
+        Self { 
+            span: Span::new(self.span.start, self.span.start), 
+            src: self.src,
+            parent: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

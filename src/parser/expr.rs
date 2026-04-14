@@ -3,14 +3,14 @@ use crate::parser::*;
 use crate::{diag::parse::*, lex::Token};
 
 impl<'a> Parser<'a> {
-    pub(super) fn parse_expr(&mut self) -> PResult<ast::Expr<'a>> {
-        self.parse_expr_binop(0)
+    pub(super) fn parse_expr(&mut self, allow_struct_init: bool) -> PResult<ast::Expr<'a>> {
+        self.parse_expr_binop(0, allow_struct_init)
     }
 
-    fn parse_expr_binop(&mut self, min_prec: u32) -> PResult<ast::Expr<'a>> {
+    fn parse_expr_binop(&mut self, min_prec: u32, allow_struct_init: bool) -> PResult<ast::Expr<'a>> {
         let start = self.next.node;
 
-        let mut lhs = self.parse_expr_2()?;
+        let mut lhs = self.parse_expr_2(allow_struct_init)?;
 
         use ast::BinOp;
         loop {
@@ -70,7 +70,7 @@ impl<'a> Parser<'a> {
             };
             self.next();
 
-            let rhs = self.parse_expr_binop(op.precedence() + op.right_to_left() as u32)?;
+            let rhs = self.parse_expr_binop(op.precedence() + op.right_to_left() as u32, allow_struct_init)?;
             lhs = ast::Expr {
                 node: self.ctx.join(start, self.previous.node),
                 kind: ast::ExprKind::BinOp {
@@ -84,25 +84,25 @@ impl<'a> Parser<'a> {
         Ok(lhs)
     }
 
-    fn parse_expr_2(&mut self) -> PResult<ast::Expr<'a>> {
+    fn parse_expr_2(&mut self, allow_struct_init: bool) -> PResult<ast::Expr<'a>> {
         //todo parse as
-        self.parse_expr_3()
+        self.parse_expr_3(allow_struct_init)
     }
 
-    fn parse_expr_3(&mut self) -> PResult<ast::Expr<'a>> {
+    fn parse_expr_3(&mut self, allow_struct_init: bool) -> PResult<ast::Expr<'a>> {
         let start = self.next.node;
         let kind = match self.next.value {
             Token::Minus => {
                 self.next();
                 ast::ExprKind::UnOp {
-                    expr: Box::new(self.parse_expr_3()?),
+                    expr: Box::new(self.parse_expr_3(allow_struct_init)?),
                     op: ast::UnOp::Neg,
                 }
             }
             Token::Bang => {
                 self.next();
                 ast::ExprKind::UnOp {
-                    expr: Box::new(self.parse_expr_3()?),
+                    expr: Box::new(self.parse_expr_3(allow_struct_init)?),
                     op: ast::UnOp::Not,
                 }
             }
@@ -124,13 +124,13 @@ impl<'a> Parser<'a> {
                 } else {
                     ast::Mutability::Const
                 };
-                ast::ExprKind::Ref(mutability, ref_kind, Box::new(self.parse_expr_3()?))
+                ast::ExprKind::Ref(mutability, ref_kind, Box::new(self.parse_expr_3(allow_struct_init)?))
             }
             Token::Star => {
                 self.next();
-                ast::ExprKind::Deref(Box::new(self.parse_expr_3()?))
+                ast::ExprKind::Deref(Box::new(self.parse_expr_3(allow_struct_init)?))
             }
-            _ => return self.parse_expr_postfix(),
+            _ => return self.parse_expr_postfix(allow_struct_init),
         };
 
         Ok(ast::Expr {
@@ -139,8 +139,8 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn parse_expr_postfix(&mut self) -> PResult<ast::Expr<'a>> {
-        let mut expr = self.parse_expr_bottom()?;
+    fn parse_expr_postfix(&mut self, allow_struct_init: bool) -> PResult<ast::Expr<'a>> {
+        let mut expr = self.parse_expr_bottom(allow_struct_init)?;
 
         loop {
             expr = match self.next.value {
@@ -149,7 +149,7 @@ impl<'a> Parser<'a> {
                     let mut args = vec![];
                     self.parse_delim(Delimiter::Paren, |parser| {
                         while !matches!(parser.next.value, Token::RPar | Token::Eof) {
-                            match parser.parse_expr() {
+                            match parser.parse_expr(true) {
                                 Ok(arg) => args.push(arg),
                                 Err(_) => {
                                     while !matches!(
@@ -187,7 +187,7 @@ impl<'a> Parser<'a> {
                 Token::LBracket => {
                     let start = expr.node;
                     let index =
-                        self.parse_delim(Delimiter::Bracket, |parser| parser.parse_expr())??;
+                        self.parse_delim(Delimiter::Bracket, |parser| parser.parse_expr(true))??;
                     ast::Expr {
                         node: self.ctx.join(start, self.previous.node),
                         kind: ast::ExprKind::Index(Box::new(expr), Box::new(index)),
@@ -204,7 +204,7 @@ impl<'a> Parser<'a> {
         let start = self.next.node;
 
         let kind = if self.consume_if(Token::If) {
-            let cond = self.parse_expr()?;
+            let cond = self.parse_expr(false)?;
             let block = self.parse_block()?;
             let chain = if self.consume_if(Token::Else) {
                 Some(Box::new(self.parse_if_chain(None)?))
@@ -227,7 +227,11 @@ impl<'a> Parser<'a> {
         let kind = match self.next.value {
             Token::If => return self.parse_if_chain(label),
             Token::While => {
-                ast::ExprKind::While(Box::new(self.parse_expr()?), self.parse_block()??, label)
+                ast::ExprKind::While(
+                    Box::new(self.parse_expr(false)?),
+                    self.parse_block()??,
+                    label,
+                )
             }
             Token::LBrace => ast::ExprKind::Block(self.parse_block()??, label),
             Token::Loop => ast::ExprKind::Loop(self.parse_block()??, label),
@@ -258,7 +262,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_expr_bottom(&mut self) -> PResult<ast::Expr<'a>> {
+    fn parse_expr_bottom(&mut self, allow_struct_init: bool) -> PResult<ast::Expr<'a>> {
         let start = self.next.node;
         let kind = match self.next.value {
             Token::LBrace | Token::If | Token::While | Token::Loop | Token::For => {
@@ -267,7 +271,7 @@ impl<'a> Parser<'a> {
             Token::Return => {
                 self.next();
                 let expr = if self.next.value.starts_stmt() {
-                    Some(Box::new(self.parse_expr()?))
+                    Some(Box::new(self.parse_expr(true)?))
                 } else {
                     None
                 };
@@ -282,7 +286,7 @@ impl<'a> Parser<'a> {
                 self.next();
                 let label = self.parse_label_opt()?;
                 let expr = if self.next.value.starts_stmt() {
-                    Some(Box::new(self.parse_expr()?))
+                    Some(Box::new(self.parse_expr(true)?))
                 } else {
                     None
                 };
@@ -312,13 +316,87 @@ impl<'a> Parser<'a> {
                 self.next();
                 ast::ExprKind::Literal(ast::Literal::Bool(true))
             }
-            Token::Ident(_) | Token::Colon => ast::ExprKind::Path(self.parse_path()?),
+            Token::Or => return self.parse_lambda(),
+            Token::Ident(_) | Token::Colon => {
+                let path = self.parse_path()?;
+
+                if allow_struct_init && self.next.value == Token::LBrace {
+                    let fields = self.parse_delim(Delimiter::Brace, |parser| {
+                        let mut fields = vec![];
+
+                        while !matches!(parser.next.value, Token::RBrace | Token::Eof) {
+                            let field = match parser.parse_symbol() {
+                                Ok(field) => field,
+                                Err(_) => {
+                                    while !matches!(
+                                        parser.next.value,
+                                        Token::RBrace | Token::Eof | Token::Comma
+                                    ) {
+                                        parser.next();
+                                    }
+
+                                    if !parser.consume_if(Token::Comma) {
+                                        break;
+                                    }
+
+                                    continue;
+                                }
+                            };
+
+                            if parser.expect_token(Token::Colon).is_err() {
+                                while !matches!(
+                                    parser.next.value,
+                                    Token::RBrace | Token::Eof | Token::Comma
+                                ) {
+                                    parser.next();
+                                }
+
+                                if !parser.consume_if(Token::Comma) {
+                                    break;
+                                }
+
+                                continue;
+                            }
+
+                            let init = match parser.parse_expr(true) {
+                                Ok(init) => init,
+                                Err(_) => {
+                                    while !matches!(
+                                        parser.next.value,
+                                        Token::RBrace | Token::Eof | Token::Comma
+                                    ) {
+                                        parser.next();
+                                    }
+
+                                    if !parser.consume_if(Token::Comma) {
+                                        break;
+                                    }
+
+                                    continue;
+                                }
+                            };
+
+                            fields.push(ast::StructInitField { field, init });
+
+                            if !parser.consume_if(Token::Comma) {
+                                break;
+                            }
+                        }
+
+                        fields
+                    })?;
+
+                    ast::ExprKind::StructInit(ast::StructInit { path, fields })
+                } else {
+                    ast::ExprKind::Path(path)
+                }
+            }
             Token::LPar => {
                 let mut trailing_comma = false;
                 let mut exprs = vec![];
                 self.parse_delim(Delimiter::Paren, |parser| {
                     while !matches!(parser.next.value, Token::RPar | Token::Eof) {
-                        match parser.parse_expr() {
+                        match parser.parse_expr(true) {
                             Ok(ok) => exprs.push(ok),
                             Err(_) => {
                                 while !matches!(
@@ -357,6 +435,135 @@ impl<'a> Parser<'a> {
         })
     }
 
+    fn parse_lambda(&mut self) -> PResult<ast::Expr<'a>> {
+        let start = self.next.node;
+        self.expect_token(Token::Or)?;
+
+        let mut args = vec![];
+        while !matches!(self.next.value, Token::Or | Token::Eof) {
+            let name = match self.parse_symbol() {
+                Ok(name) => name,
+                Err(_) => {
+                    while !matches!(self.next.value, Token::Or | Token::Eof | Token::Comma) {
+                        self.next();
+                    }
+
+                    if !self.consume_if(Token::Comma) {
+                        break;
+                    }
+
+                    continue;
+                }
+            };
+
+            let ty = if self.consume_if(Token::Colon) {
+                Some(self.parse_type()?)
+            } else {
+                None
+            };
+
+            args.push(ast::LambdaArg { name, ty });
+
+            if !self.consume_if(Token::Comma) {
+                break;
+            }
+        }
+
+        self.expect_token(Token::Or)?;
+
+        if !self.next.value.delim_open() {
+            self.ctx.report(MissingDelimiters {
+                node: self.previous.node.after(),
+                suggestion: "add lambda captures",
+                missing: "lambda captures",
+                delims: "[]",
+            });
+            return Err(());
+        }
+
+        let mut captures = vec![];
+        self.parse_delim(Delimiter::Bracket, |parser|{
+            while !matches!(parser.next.value, Token::RBracket | Token::Eof) {
+                let kind = if parser.consume_if(Token::Ampersand) {
+                    let ref_kind = match parser.next.value {
+                        Token::Ident("raw") => {
+                            parser.next();
+                            ast::RefKind::Ptr
+                        }
+                        Token::Ident("pin") => {
+                            parser.next();
+                            ast::RefKind::Pinned
+                        }
+                        _ => ast::RefKind::Ref,
+                    };
+                    let mutability = if parser.consume_if(Token::Mut) {
+                        ast::Mutability::Mut
+                    } else {
+                        ast::Mutability::Const
+                    };
+                    ast::LambdaCaptureKind::Borrow(mutability, ref_kind)
+                } else {
+                    ast::LambdaCaptureKind::Move
+                };
+
+                let name = match parser.parse_symbol() {
+                    Ok(name) => name,
+                    Err(_) => {
+                        while !matches!(parser.next.value, Token::RBracket | Token::Eof | Token::Comma)
+                        {
+                            parser.next();
+                        }
+
+                        if !parser.consume_if(Token::Comma) {
+                            break;
+                        }
+
+                        continue;
+                    }
+                };
+
+                captures.push(ast::LambdaCapture { name, kind });
+
+                if !parser.consume_if(Token::Comma) {
+                    break;
+                }
+            }
+
+        })?;
+
+        let ret = if self.consume_if(Token::SmallRightArrow) {
+            Some(self.parse_type()?)
+        } else {
+            None
+        };
+
+        let body = if self.next.value == Token::LBrace {
+            ast::LambdaBody::Block(self.parse_block()??)
+        } else {
+            let expr = self.parse_expr(true)?;
+            if ret.is_some() {
+                self.ctx.report(LambdaExprBodyCannotHaveReturnType {
+                    node: self.ctx.join(start, self.previous.node),
+                    wrap_in_block: WrapExprInBraces {
+                        open: expr.node.before(),
+                        close: expr.node.after(),
+                    },
+                });
+            }
+            ast::LambdaBody::Expr(Box::new(expr))
+        };
+
+        Ok(ast::Expr {
+            node: self.ctx.join(start, self.previous.node),
+            kind: ast::ExprKind::Lambda(ast::Lambda {
+                args,
+                captures,
+                ret,
+                body,
+            }),
+        })
+    }
+
     pub(super) fn parse_stmt(&mut self) -> PResult<ast::Stmt<'a>> {
         let start = self.next.node;
 
@@ -373,8 +580,16 @@ impl<'a> Parser<'a> {
             | Token::Static
             | Token::Const
             | Token::Fn
-            | Token::Mod => self.parse_item().map(ast::StmtKind::Item),
-            _ => self.parse_expr().map(|expr| {
+            | Token::Mod
+            | Token::Use => self.parse_item().map(ast::StmtKind::Item),
+
+            Token::If
+            | Token::While
+            | Token::For
+            | Token::Loop
+            | Token::LBrace => self.parse_expr_bottom(true).map(ast::StmtKind::Block),
+
+            _ => self.parse_expr(true).map(|expr| {
                 if self.consume_if(Token::Semicolon) {
                     ast::StmtKind::ExprSemi(expr)
                 } else {
@@ -410,7 +625,7 @@ impl<'a> Parser<'a> {
             None
         };
         let initializer = if self.consume_if(Token::Assign) {
-            Some(self.parse_expr()?)
+            Some(self.parse_expr(true)?)
         } else {
             None
         };

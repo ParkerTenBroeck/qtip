@@ -236,7 +236,7 @@ impl<'a> Parser<'a> {
         self.expect_token(Token::Colon)?;
         let ty = self.parse_type()?;
         let expr = if self.consume_if(Token::Assign) {
-            Some(self.parse_expr()?)
+            Some(self.parse_expr(true)?)
         } else {
             None
         };
@@ -260,7 +260,7 @@ impl<'a> Parser<'a> {
         self.expect_token(Token::Colon)?;
         let ty = self.parse_type()?;
         self.expect_token(Token::Assign)?;
-        let expr = self.parse_expr()?;
+        let expr = self.parse_expr(true)?;
         self.expect_semi();
 
         Ok(ast::ConstItem {

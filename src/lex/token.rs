@@ -275,6 +275,7 @@ impl<'a> Token<'a> {
                 | Token::For
                 | Token::Loop
                 | Token::At
+                | Token::Or
                 | Token::Ident(_)
                 | Token::Minus
                 | Token::Bang

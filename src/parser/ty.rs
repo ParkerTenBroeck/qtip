@@ -104,7 +104,7 @@ impl<'a> Parser<'a> {
                 let ty = self.parse_type()?;
 
                 if self.consume_if(Token::Semicolon) {
-                    let expr = self.parse_expr()?;
+                    let expr = self.parse_expr(true)?;
                     self.expect_token(Token::RBracket)?;
                     ast::TypeKind::Array(Box::new(ty), Box::new(expr))
                 } else {

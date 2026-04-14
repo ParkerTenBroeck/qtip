@@ -182,6 +182,7 @@ pub enum StmtKind<'a> {
     Expr(Expr<'a>),
     ExprSemi(Expr<'a>),
     Let(Let<'a>),
+    Block(Expr<'a>),
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Copy)]
@@ -320,6 +321,50 @@ pub enum RefKind {
 }
 
 #[derive(Debug)]
+pub enum LambdaBody<'a>{
+    Expr(Box<Expr<'a>>),
+    Block(Block<'a>),
+}
+
+#[derive(Debug)]
+pub struct LambdaArg<'a>{
+    pub name: Symbol<'a>,
+    pub ty: Option<Type<'a>>,
+}
+
+#[derive(Debug)]
+pub enum LambdaCaptureKind{
+    Move,
+    Borrow(Mutability, RefKind)
+}
+
+#[derive(Debug)]
+pub struct LambdaCapture<'a>{
+    pub name: Symbol<'a>,
+    pub kind: LambdaCaptureKind,
+}
+
+#[derive(Debug)]
+pub struct Lambda<'a>{
+    pub args: Vec<LambdaArg<'a>>,
+    pub captures: Vec<LambdaCapture<'a>>,
+    pub ret: Option<Type<'a>>,
+    pub body: LambdaBody<'a>
+}
+
+#[derive(Debug)]
+pub struct StructInitField<'a>{
+    pub field: Symbol<'a>,
+    pub init: Expr<'a>,
+}
+
+#[derive(Debug)]
+pub struct StructInit<'a>{
+    pub path: Path<'a>,
+    pub fields: Vec<StructInitField<'a>>
+}
+
+#[derive(Debug)]
 pub enum ExprKind<'a> {
     Block(Block<'a>, Option<Label<'a>>),
     If(
@@ -353,6 +398,8 @@ pub enum ExprKind<'a> {
         expr: Box<Expr<'a>>,
         ty: Type<'a>,
     },
+    StructInit(StructInit<'a>),
+    Lambda(Lambda<'a>),
     Path(Path<'a>),
     Literal(Literal<'a>),
     Paren(Box<Expr<'a>>),

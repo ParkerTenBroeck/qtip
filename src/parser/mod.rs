@@ -301,6 +301,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_symbol(&mut self) -> PResult<ast::Symbol<'a>> {
+        
         if let Token::Ident(name) = self.next.value {
             self.next();
             Ok(ast::Symbol {
@@ -309,7 +310,7 @@ impl<'a> Parser<'a> {
             })
         } else {
             self.ctx.report(ExpectedSymbol {
-                node: self.previous.node.after(),
+                node: self.next.node,
                 found: self.next.value,
             });
             if !self.next.value.delim() {
