@@ -7,7 +7,11 @@ impl<'a> Parser<'a> {
         self.parse_expr_binop(0, allow_struct_init)
     }
 
-    fn parse_expr_binop(&mut self, min_prec: u32, allow_struct_init: bool) -> PResult<ast::Expr<'a>> {
+    fn parse_expr_binop(
+        &mut self,
+        min_prec: u32,
+        allow_struct_init: bool,
+    ) -> PResult<ast::Expr<'a>> {
         let start = self.next.node;
 
         let mut lhs = self.parse_expr_2(allow_struct_init)?;
@@ -70,7 +74,10 @@ impl<'a> Parser<'a> {
             };
             self.next();
 
-            let rhs = self.parse_expr_binop(op.precedence() + op.right_to_left() as u32, allow_struct_init)?;
+            let rhs = self.parse_expr_binop(
+                op.precedence() + op.right_to_left() as u32,
+                allow_struct_init,
+            )?;
             lhs = ast::Expr {
                 node: self.ctx.join(start, self.previous.node),
                 kind: ast::ExprKind::BinOp {
@@ -137,7 +144,11 @@ impl<'a> Parser<'a> {
                 } else {
                     ast::Mutability::Const
                 };
-                ast::ExprKind::Ref(mutability, ref_kind, Box::new(self.parse_expr_3(allow_struct_init)?))
+                ast::ExprKind::Ref(
+                    mutability,
+                    ref_kind,
+                    Box::new(self.parse_expr_3(allow_struct_init)?),
+                )
             }
             Token::Star => {
                 self.next();
@@ -239,13 +250,11 @@ impl<'a> Parser<'a> {
         let start = self.next.node;
         let kind = match self.next.value {
             Token::If => return self.parse_if_chain(label),
-            Token::While => {
-                ast::ExprKind::While(
-                    Box::new(self.parse_expr(false)?),
-                    self.parse_block()??,
-                    label,
-                )
-            }
+            Token::While => ast::ExprKind::While(
+                Box::new(self.parse_expr(false)?),
+                self.parse_block()??,
+                label,
+            ),
             Token::LBrace => ast::ExprKind::Block(self.parse_block()??, label),
             Token::Loop => ast::ExprKind::Loop(self.parse_block()??, label),
             Token::For => ast::ExprKind::For(self.parse_block()??, label),
@@ -495,7 +504,7 @@ impl<'a> Parser<'a> {
         }
 
         let mut captures = vec![];
-        self.parse_delim(Delimiter::Bracket, |parser|{
+        self.parse_delim(Delimiter::Bracket, |parser| {
             while !matches!(parser.next.value, Token::RBracket | Token::Eof) {
                 let kind = if parser.consume_if(Token::Ampersand) {
                     let ref_kind = match parser.next.value {
@@ -522,8 +531,10 @@ impl<'a> Parser<'a> {
                 let name = match parser.parse_symbol() {
                     Ok(name) => name,
                     Err(_) => {
-                        while !matches!(parser.next.value, Token::RBracket | Token::Eof | Token::Comma)
-                        {
+                        while !matches!(
+                            parser.next.value,
+                            Token::RBracket | Token::Eof | Token::Comma
+                        ) {
                             parser.next();
                         }
 
@@ -541,7 +552,6 @@ impl<'a> Parser<'a> {
                     break;
                 }
             }
-
         })?;
 
         let ret = if self.consume_if(Token::SmallRightArrow) {
@@ -596,11 +606,9 @@ impl<'a> Parser<'a> {
             | Token::Mod
             | Token::Use => self.parse_item().map(ast::StmtKind::Item),
 
-            Token::If
-            | Token::While
-            | Token::For
-            | Token::Loop
-            | Token::LBrace => self.parse_expr_bottom(true).map(ast::StmtKind::Block),
+            Token::If | Token::While | Token::For | Token::Loop | Token::LBrace => {
+                self.parse_expr_bottom(true).map(ast::StmtKind::Block)
+            }
 
             _ => self.parse_expr(true).map(|expr| {
                 if self.consume_if(Token::Semicolon) {

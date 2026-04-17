@@ -130,13 +130,11 @@ impl<'a> Parser<'a> {
                     _ => {}
                 }
             }
-            Token::Eof => {
-                if !self.delimiter_stack.is_empty() {
-                    self.ctx.report(UnclosedDelimiters {
-                        node: self.previous.node,
-                        unclosed: self.delimiter_stack.drain(..).map(|(_, n)| n).collect(),
-                    });
-                }
+            Token::Eof if !self.delimiter_stack.is_empty() => {
+                self.ctx.report(UnclosedDelimiters {
+                    node: self.previous.node,
+                    unclosed: self.delimiter_stack.drain(..).map(|(_, n)| n).collect(),
+                });
             }
             _ => {}
         }
@@ -301,7 +299,6 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_symbol(&mut self) -> PResult<ast::Symbol<'a>> {
-        
         if let Token::Ident(name) = self.next.value {
             self.next();
             Ok(ast::Symbol {

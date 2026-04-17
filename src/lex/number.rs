@@ -25,9 +25,7 @@ impl PartialEq for Number<'_> {
     }
 }
 
-impl Eq for Number<'_> {
-    fn assert_receiver_is_total_eq(&self) {}
-}
+impl Eq for Number<'_> {}
 
 impl std::fmt::Debug for Number<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
