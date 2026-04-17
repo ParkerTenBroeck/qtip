@@ -114,14 +114,43 @@ pub struct UnexpectedToken<'a> {
 }
 
 #[derive(Diagnostic)]
-#[diag("missing {missing}")]
-pub struct MissingDelimiters {
+#[diag("missing lambda captures")]
+pub struct MissingLambdaCaptures {
     #[primary_node]
-    #[suggestion("{suggestion}", code = "{delims}")]
+    #[suggestion("add lambda captures", code = "[]")]
     pub node: Node,
-    pub suggestion: &'static str,
-    pub delims: &'static str,
-    pub missing: &'static str,
+}
+
+#[derive(Diagnostic)]
+#[diag("missing parameter list")]
+pub struct MissingFnTypeParamList {
+    #[primary_node]
+    #[suggestion("add a parameter list", code = "()")]
+    pub node: Node,
+}
+
+#[derive(Diagnostic)]
+#[diag("missing block")]
+pub struct MissingBlock {
+    #[primary_node]
+    #[suggestion("add block", code = "{{}}")]
+    pub node: Node,
+}
+
+#[derive(Diagnostic)]
+#[diag("missing parameter list")]
+pub struct MissingFnParamList {
+    #[primary_node]
+    #[suggestion("add a parameter list", code = "()")]
+    pub node: Node,
+}
+
+#[derive(Diagnostic)]
+#[diag("missing function body")]
+pub struct MissingFnBody {
+    #[primary_node]
+    #[suggestion("add a function body", code = "{{}}")]
+    pub node: Node,
 }
 
 #[derive(Diagnostic)]

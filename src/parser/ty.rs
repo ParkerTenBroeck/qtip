@@ -75,11 +75,8 @@ impl<'a> Parser<'a> {
             Token::Fn => {
                 self.next();
                 if !self.next.value.delim_open() {
-                    self.ctx.report(MissingDelimiters {
+                    self.ctx.report(MissingFnTypeParamList {
                         node: self.previous.node.after(),
-                        suggestion: "missing parameters for fn type",
-                        missing: "add a parameter list",
-                        delims: "()",
                     });
                     return Err(());
                 }

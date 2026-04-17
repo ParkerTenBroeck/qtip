@@ -494,11 +494,8 @@ impl<'a> Parser<'a> {
         self.expect_token(Token::Or)?;
 
         if !self.next.value.delim_open() {
-            self.ctx.report(MissingDelimiters {
+            self.ctx.report(MissingLambdaCaptures {
                 node: self.previous.node.after(),
-                suggestion: "add lambda captures",
-                missing: "lambda captures",
-                delims: "[]",
             });
             return Err(());
         }

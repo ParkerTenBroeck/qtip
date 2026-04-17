@@ -304,11 +304,8 @@ impl<'a> Parser<'a> {
         let mut params = vec![];
 
         if !self.next.value.delim_open() {
-            self.ctx.report(MissingDelimiters {
+            self.ctx.report(MissingFnParamList {
                 node: self.previous.node.after(),
-                suggestion: "missing parameters for function definition",
-                missing: "add a parameter list",
-                delims: "()",
             });
             return Err(());
         }
@@ -344,11 +341,8 @@ impl<'a> Parser<'a> {
             None
         } else {
             if !self.next.value.delim_open() {
-                self.ctx.report(MissingDelimiters {
+                self.ctx.report(MissingFnBody {
                     node: self.previous.node.after(),
-                    suggestion: "function body",
-                    missing: "function body",
-                    delims: "{}",
                 });
                 return Err(());
             }

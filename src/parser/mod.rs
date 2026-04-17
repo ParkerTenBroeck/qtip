@@ -279,11 +279,8 @@ impl<'a> Parser<'a> {
         let mut stmts = vec![];
 
         if !self.next.value.delim_open() {
-            self.ctx.report(MissingDelimiters {
+            self.ctx.report(MissingBlock {
                 node: self.previous.node.after(),
-                suggestion: "add block",
-                missing: "block",
-                delims: "{}",
             });
             return Err(());
         }
